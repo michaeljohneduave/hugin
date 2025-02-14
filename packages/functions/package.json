@@ -1,0 +1,12 @@
+{
+  "name": "@hugin-scraper/functions",
+  "version": "0.0.0",
+  "type": "module",
+  "dependencies": {
+    "@hugin-scraper/core": "*",
+    "sst": "*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8"
+  }
+}
