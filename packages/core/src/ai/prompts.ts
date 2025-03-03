@@ -1,6 +1,6 @@
-import { google } from "@ai-sdk/google";
-import { generateObject, generateText } from "ai";
+import { generateObject } from "ai";
 import { z } from "zod";
+import { bigModel } from "./config";
 
 const MAX_TOKEN = 8192;
 
@@ -8,7 +8,7 @@ export function getSiteScrapingPurpose(text: string) {
 	return generateObject({
 		maxTokens: MAX_TOKEN,
 		mode: "json",
-		model: google("gemini-2.0-flash-001"),
+		model: bigModel,
 		schema: z.array(
 			z.object({
 				url: z.string(),
@@ -45,8 +45,7 @@ export function prioritizeUrls(
 	return generateObject({
 		maxTokens: MAX_TOKEN,
 		mode: "json",
-		model: google("gemini-2.0-flash-001"),
-		// model: google("gemini-2.0-flash-lite-preview-02-05"),
+		model: bigModel,
 		schema: z.array(
 			z.object({
 				url: z.string(),
@@ -84,7 +83,7 @@ export function prioritizeUrls(
 export const RELEVANCE_SCORE_CUTOFF = 0.85;
 export function reformatTextToObject(text: string) {
 	return generateObject({
-		model: google("gemini-2.0-flash-001"),
+		model: bigModel,
 		mode: "json",
 		schema: z.array(
 			z.object({
@@ -110,7 +109,7 @@ export function reformatTextToObject(text: string) {
 
 export function reformatTextToObjectWithPurpose(purpose: string, text: string) {
 	return generateObject({
-		model: google("gemini-2.0-flash-001"),
+		model: bigModel,
 		mode: "json",
 		schema: z.array(
 			z.object({
