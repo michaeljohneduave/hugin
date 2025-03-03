@@ -1,16 +1,18 @@
 {
-  "name": "@hugin-scraper/scripts",
+  "name": "scripts",
   "version": "0.0.0",
   "type": "module",
-  "dependencies": {
-    "@hugin-scraper/core": "*",
-    "sst": "*"
-  },
   "scripts": {
     "shell": "sst shell tsx"
   },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "sst": "*"
+  },
   "devDependencies": {
-    "@types/node": "^22",
-    "tsx": "^4"
+    "tsx": "^4.19.3"
   }
 }

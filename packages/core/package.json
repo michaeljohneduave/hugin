@@ -1,20 +1,19 @@
 {
-  "name": "@hugin-scraper/core",
+  "name": "@hugin-bot/core",
   "type": "module",
   "version": "0.0.0",
   "scripts": {
     "test": "sst shell vitest"
   },
-  "exports": {
-    "./*": [
-      "./src/*/index.ts",
-      "./src/*.ts"
-    ]
-  },
   "dependencies": {
-    "sst": "*"
+    "@ai-sdk/google": "^1.1.16",
+    "ai": "^4.1.44",
+    "pg": "^8.13.3",
+    "sst": "*",
+    "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/pg": "^8.11.11",
     "vitest": "^2"
   }
 }

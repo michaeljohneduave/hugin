@@ -1,0 +1,7 @@
+.*
+infra
+migrations
+**/node_modules
+apps
+
+

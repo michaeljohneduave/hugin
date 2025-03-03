@@ -1,0 +1,25 @@
+{
+  "name": "@hugin-bot/scraper",
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "shell": "sst shell tsx"
+  },
+  "dependencies": {
+    "@ai-sdk/google": "^1.1.17",
+    "@mozilla/readability": "^0.5.0",
+    "ai": "^4.1.47",
+    "cheerio": "^1.0.0",
+    "dompurify": "^3.2.4",
+    "fast-xml-parser": "^5.0.1",
+    "isomorphic-dompurify": "^2.22.0",
+    "jsdom": "^26.0.0",
+    "puppeteer": "^24.2.1",
+    "turndown": "^7.2.0"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^21.1.7",
+    "@types/turndown": "^5.0.5",
+    "tsx": "^4.19.3"
+  }
+}
