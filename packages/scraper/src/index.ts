@@ -96,6 +96,12 @@ async function main() {
 				);
 			} catch (e) {
 				console.error(e);
+				await db
+					.update(Urls)
+					.set({
+						status: "error",
+					})
+					.where(eq(Urls.id, record.id));
 			}
 
 			console.log(record.url, "done");
