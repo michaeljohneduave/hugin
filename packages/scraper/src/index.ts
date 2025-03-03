@@ -1,4 +1,3 @@
-import fs from "node:fs/promises";
 import { google } from "@ai-sdk/google";
 import { storePriorityUrls } from "@hugin-bot/core/src/ai/libs";
 import {
@@ -7,11 +6,7 @@ import {
 } from "@hugin-bot/core/src/ai/prompts";
 import { db } from "@hugin-bot/core/src/drizzle";
 import { Contents } from "@hugin-bot/core/src/entities/content.sql";
-import {
-	type NewUrl,
-	type Url,
-	Urls,
-} from "@hugin-bot/core/src/entities/url.sql";
+import { type Url, Urls } from "@hugin-bot/core/src/entities/url.sql";
 import { sleep } from "@hugin-bot/core/src/utils";
 import { embedMany } from "ai";
 import { eq } from "drizzle-orm";
@@ -43,6 +38,8 @@ async function main() {
 				}
 
 				// TODO: Check token length since this is 1:1
+				// TODO: Include more context to help llm filter out unrelated sites
+				// Some urls are outside of the domain,
 				const { object: embeddableObject } =
 					await reformatTextToObjectWithPurpose(
 						record.purpose,

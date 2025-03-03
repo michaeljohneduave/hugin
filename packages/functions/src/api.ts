@@ -1,12 +1,5 @@
 import { storePriorityUrls } from "@hugin-bot/core/src/ai/libs";
-import {
-	getSiteScrapingPurpose,
-	prioritizeUrls,
-} from "@hugin-bot/core/src/ai/prompts";
-import { db } from "@hugin-bot/core/src/drizzle";
-import { Urls } from "@hugin-bot/core/src/entities/url.sql";
-import type { NewUrl } from "@hugin-bot/core/src/entities/url.sql";
-import { cleanUrl } from "@hugin-bot/scraper/src/utils/cleanUrl";
+import { getSiteScrapingPurpose } from "@hugin-bot/core/src/ai/prompts";
 import getSitemap from "@hugin-bot/scraper/src/utils/getSitemap";
 import type { Handler } from "aws-lambda";
 import { Resource } from "sst";

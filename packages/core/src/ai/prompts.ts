@@ -26,7 +26,8 @@ export function getSiteScrapingPurpose(text: string) {
 				purpose: Learn about the company's tech stack
 				confidence: {0-1}
 
-			User must provide a valid url or website, do not infer the url from a company name or anything.
+			User must provide a valid url or website, do not infer the url from the company name or anything.
+			For the purpose: Write a 1-2 verbose sentences about the purpose
 			Return 0 confidence if url is missing.
 			Return the fully constructed url. (www.spare.com to https://www.spare.com)
     `,
@@ -118,7 +119,9 @@ export function reformatTextToObjectWithPurpose(purpose: string, text: string) {
 			}),
 		),
 		system: `
-			You are tasked in reorganizing of unstructured pieces of text. 
+		You have 2 tasks:
+				1. Reorganization of unstructured pieces of text. 
+				2. Identify reorganized text if it is relevant to the purpose or intent of the user
 			Here are your directive:
 				- Text must be related to the purpose.
 				- Reformat text for efficient embedding conversion.
