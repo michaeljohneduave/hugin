@@ -1,6 +1,8 @@
 import { cleanUrl } from "@hugin-bot/scraper/src/utils/cleanUrl";
+import { embedMany } from "ai";
 import { db } from "../drizzle";
 import { type NewUrl, Urls } from "../entities/url.sql";
+import { embeddingModel } from "./config";
 import { prioritizeUrls } from "./prompts";
 
 export async function storePriorityUrls(
@@ -28,4 +30,11 @@ export async function storePriorityUrls(
 	if (urlsToScrape.length > 0) {
 		await db.insert(Urls).values(urlsToScrape).onConflictDoNothing().execute();
 	}
+}
+
+export function generateEmbeddings(texts: string[]) {
+	return embedMany({
+		model: embeddingModel,
+		values: texts,
+	});
 }

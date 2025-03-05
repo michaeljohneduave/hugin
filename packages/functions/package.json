@@ -5,6 +5,7 @@
   "dependencies": {
     "@hugin-bot/core": "*",
     "@hugin-bot/scraper": "*",
+    "lambda-stream": "^0.5.0",
     "pg": "^8.13.3",
     "sst": "*"
   },

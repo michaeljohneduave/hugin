@@ -1,5 +1,8 @@
 import { google } from "@ai-sdk/google";
-import { storePriorityUrls } from "@hugin-bot/core/src/ai/libs";
+import {
+	generateEmbeddings,
+	storePriorityUrls,
+} from "@hugin-bot/core/src/ai/libs";
 import {
 	RELEVANCE_SCORE_CUTOFF,
 	reformatTextToObjectWithPurpose,
@@ -61,10 +64,7 @@ async function main() {
 					continue;
 				}
 
-				const { embeddings } = await embedMany({
-					model: google.textEmbeddingModel("text-embedding-004"),
-					values: texts,
-				});
+				const { embeddings } = await generateEmbeddings(texts);
 
 				await db
 					.insert(Contents)
@@ -107,8 +107,6 @@ async function main() {
 			console.log(record.url, "done");
 			await sleep(20_000);
 		}
-
-		// await db.insert(Urls).values(urlsToPrioritize)
 	} while (records.length);
 
 	process.exit();

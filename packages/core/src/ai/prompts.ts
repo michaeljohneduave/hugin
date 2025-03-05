@@ -1,14 +1,13 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { bigModel } from "./config";
-
-const MAX_TOKEN = 8192;
+import { BIG_MODEL_MAX_TOKEN, bigModel } from "./config";
 
 export function getSiteScrapingPurpose(text: string) {
 	return generateObject({
-		maxTokens: MAX_TOKEN,
-		mode: "json",
 		model: bigModel,
+		mode: "json",
+		temperature: 0,
+		maxTokens: BIG_MODEL_MAX_TOKEN,
 		schema: z.array(
 			z.object({
 				url: z.string(),
@@ -43,9 +42,10 @@ export function prioritizeUrls(
 	}[],
 ) {
 	return generateObject({
-		maxTokens: MAX_TOKEN,
-		mode: "json",
 		model: bigModel,
+		mode: "json",
+		temperature: 0,
+		maxTokens: BIG_MODEL_MAX_TOKEN,
 		schema: z.array(
 			z.object({
 				url: z.string(),
@@ -85,6 +85,7 @@ export function reformatTextToObject(text: string) {
 	return generateObject({
 		model: bigModel,
 		mode: "json",
+		temperature: 0,
 		schema: z.array(
 			z.object({
 				text: z.string(),
@@ -111,6 +112,7 @@ export function reformatTextToObjectWithPurpose(purpose: string, text: string) {
 	return generateObject({
 		model: bigModel,
 		mode: "json",
+		temperature: 0,
 		schema: z.array(
 			z.object({
 				text: z.string(),
