@@ -4,6 +4,7 @@ import {
 	pgTable,
 	serial,
 	text,
+	timestamp,
 	vector,
 } from "drizzle-orm/pg-core";
 
@@ -18,6 +19,8 @@ export const Contents = pgTable(
 		embedding: vector({
 			dimensions: GOOGLE_TEXT_EMBEDDING_SIZE,
 		}).notNull(),
+		createdAt: timestamp().defaultNow(),
+		updatedAt: timestamp().defaultNow(),
 	},
 	(table) => [
 		index("embeddingIndex").using(

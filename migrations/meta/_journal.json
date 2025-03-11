@@ -36,6 +36,13 @@
       "when": 1741133769226,
       "tag": "0004_ancient_kabuki",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1741729947978,
+      "tag": "0005_dry_red_ghost",
+      "breakpoints": true
     }
   ]
 }
