@@ -40,4 +40,6 @@ async function handler(
 		(await res.steps).flatMap((step) => step.toolCalls),
 	);
 	console.log("toolResults", await res.toolResults);
+	console.log("reasoningDetails", await res.reasoningDetails);
+	console.log("usage", res.usage);
 }

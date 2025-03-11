@@ -7,10 +7,11 @@ import { prioritizeUrls } from "./prompts";
 
 export async function storePriorityUrls(
 	mainUrl: string,
-	links: Parameters<typeof prioritizeUrls>[1],
+	// Anti pattern
+	links: Parameters<typeof prioritizeUrls>[2],
 	purpose: string,
 ) {
-	const { object: urls } = await prioritizeUrls(purpose, links);
+	const { object: urls } = await prioritizeUrls(purpose, mainUrl, links);
 
 	const urlsToScrape: NewUrl[] = urls
 		.filter((url) => url.priority === "high" || url.priority === "medium-high")

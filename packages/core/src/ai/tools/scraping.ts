@@ -1,5 +1,6 @@
 import getSitemap from "@hugin-bot/scraper/src/utils/getSitemap";
 import { tool } from "ai";
+import { eq } from "drizzle-orm";
 import { Resource } from "sst";
 import { task } from "sst/aws/task";
 import { z } from "zod";
@@ -10,8 +11,8 @@ import { getSiteScrapingPurpose } from "../prompts";
 
 export const scrapeUrl = tool({
 	description: `
-    Scrapes the website for content and stores in inside a vector database.
-    Returns the status of the task.
+    Scrapes the website for content and returns the status and id of the task.
+		Use this tool when the intent is clear and there is a URL present.
   `,
 	parameters: z.object({
 		urlset: z.array(
@@ -24,7 +25,6 @@ export const scrapeUrl = tool({
 		),
 	}),
 	execute: async (params, toolOpts) => {
-		console.log("scrapeUrl.params", params);
 		for (const item of params.urlset) {
 			const sitemapUrls = await getSitemap(item.url);
 
@@ -36,12 +36,22 @@ export const scrapeUrl = tool({
 		}
 
 		const response = await task.run(Resource.ScraperTask);
-		console.log("scrapeUrl", response);
+		const str = response.arn.split("/").pop()!;
+
+		const record = await db
+			.insert(Tasks)
+			.values({
+				arn: response.arn,
+			})
+			.onConflictDoNothing()
+			.returning({
+				id: Tasks.id,
+			});
 
 		// TODO: Store the arn someplace else.
 		// or truncate the arn
 		return {
-			arn: response.arn,
+			id: record[0].id,
 			status: response.status,
 		};
 	},
@@ -51,16 +61,28 @@ export const scrapingTaskStatus = tool({
 	description: `
     Checks the status of a running scrapeUrl task.
     Tell the user to ask in a later time if the status is pending.
+		Do not call along with the scrapeUrl tool.
   `,
 	parameters: z.object({
 		arn: z.string(),
 	}),
 	execute: async (params) => {
-		console.log("params.arn", params.arn);
-		const response = await task.describe(Resource.ScraperTask, params.arn);
+		const currentTask = await db.query.Tasks.findFirst({
+			columns: {
+				arn: true,
+				id: true,
+			},
+			where: (tasks, { eq }) => eq(tasks.id, params.arn),
+		});
+
+		if (!currentTask) {
+			return "Task doesn't exist";
+		}
+
+		const response = await task.describe(Resource.ScraperTask, currentTask.arn);
 
 		return {
-			arn: response.arn,
+			id: currentTask?.id,
 			status: response.status,
 		};
 	},

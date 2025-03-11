@@ -12,6 +12,9 @@
     "rules": {
       "suspicious": {
         "useAwait": "error"
+      },
+      "style": {
+        "noNonNullAssertion": "off"
       }
     }
   }

@@ -1,6 +1,6 @@
 import { generateObject } from "ai";
 import { z } from "zod";
-import { BIG_MODEL_MAX_TOKEN, bigModel } from "./config";
+import { BIG_MODEL_MAX_TOKEN, bigModel, smolModel } from "./config";
 
 export function getSiteScrapingPurpose(text: string) {
 	return generateObject({
@@ -36,6 +36,7 @@ export function getSiteScrapingPurpose(text: string) {
 
 export function prioritizeUrls(
 	purpose: string,
+	mainUrl: string,
 	urls: {
 		url: string;
 		description?: string;
@@ -54,26 +55,21 @@ export function prioritizeUrls(
 		),
 		system: `
       You are tasked with prioritizing the following URLs that are most relevant in helping the user find the most relevant information for the stated purpose.
-      Before you start prioritizing the URLs, you should group the urls into categories based on the description and pathname of the URL.
-
-		  The output must be an array of objects with the following properties:
-      - url: the URL of the page
-      - priority: the priority of the URL
 
       The priority can be one of the following:
-      - high: the URL is very relevant to the user's purpose
-      - medium-high: the URL is relevant to the user's purpose
-      - medium: the URL is somewhat relevant to the user's purpose
-      - low: the URL is not relevant to the user's purpose
+      - high: the URL is very relevant to the main url and user's purpose
+      - medium-high: the URL is relevant to the main url and user's purpose
+      - medium: the URL is somewhat relevant to the main url and user's purpose
+      - low: the URL is not relevant to the main url and user's purpose
 
-			Additional Rules:
+			Additional Directives:
       Return only the high and medium-high priority URLs.
-			Exclude social media urls and the like. Ex: linkedin, twitter, x, facebook, instagram, youtube
-
+			Exclude social media urls and the like. Ex: linkedin, twitter, x, facebook, instagram, youtube.
+			Check the urls and only include relevant to the Main URL.
     `,
 		prompt: `
       Purpose: ${purpose}
-
+			Main URL: ${mainUrl}
       URLS:
       ${urls.map(({ url, description }) => `- ${url}: ${description || "No description"}`).join("\n")}
       `,
@@ -123,7 +119,7 @@ export function reformatTextToObjectWithPurpose(purpose: string, text: string) {
 		You have 2 tasks:
 				1. Reorganization of unstructured pieces of text. 
 				2. Identify reorganized text if it is relevant to the purpose or intent of the user
-			Here are your directive:
+			Here are your directives:
 				- Text must be related to the purpose.
 				- Reformat text for efficient embedding conversion.
 				- Preserve structure and organize into semantic segments.
@@ -139,6 +135,20 @@ export function reformatTextToObjectWithPurpose(purpose: string, text: string) {
 
 			Text:
 			${text}
+		`,
+	});
+}
+
+export function transformToKeywords(query: string) {
+	return generateObject({
+		model: smolModel,
+		mode: "json",
+		temperature: 0.5,
+		schema: z.array(z.string()),
+		system: `
+			You are a keyword assistant in case the vector database doesn't return any results for the query. Data has already been gathered but the query may have been too vague to match with the vector database. Transform this query into a set of effective keywords that will help return useful results.
+
+			Query: ${query}
 		`,
 	});
 }
