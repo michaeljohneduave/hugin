@@ -6,16 +6,21 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "sst dev"
+    "chatdb:generate": "sst shell drizzle-kit generate -- --config packages/functions/drizzle.config.ts",
+    "chatdb:push": "sst shell tsx packages/scripts/src/d1-push",
+    "deploy": "sst deploy --stage prod",
+    "dev": "sst dev --stage mike"
   },
   "devDependencies": {
     "@biomejs/biome": "1.9.4",
     "@tsconfig/node22": "^22",
+    "@types/aws-lambda": "8.10.147",
     "typescript": "^5"
   },
   "dependencies": {
     "drizzle-kit": "^0.30.4",
     "drizzle-orm": "^0.39.3",
+    "remeda": "^2.21.2",
     "sst": "^3"
   }
 }

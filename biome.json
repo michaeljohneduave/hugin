@@ -2,7 +2,6 @@
   "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
     "ignore": [
-      "sst*.ts",
       "node_modules",
       "dist",
       "build"
@@ -16,6 +15,11 @@
       "style": {
         "noNonNullAssertion": "off"
       }
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "bracketSpacing": true
     }
   }
 }

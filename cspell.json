@@ -1,0 +1,30 @@
+{
+    "version": "0.2",
+    "ignorePaths": [],
+    "dictionaryDefinitions": [
+        {
+            "name": "custom-dictionary",
+            "path": "./.cspell/custom-dictionary.txt",
+            "addWords": true
+        }
+    ],
+    "dictionaries": [
+        "custom-dictionary"
+    ],
+    "words": [
+        "apigatewaymanagementapi",
+        "CONNECTIONID",
+        "gifs",
+        "giphy",
+        "hugin",
+        "llms",
+        "lucide",
+        "sadd",
+        "smembers",
+        "srem",
+        "trpc",
+        "Valkey"
+    ],
+    "ignoreWords": [],
+    "import": []
+}

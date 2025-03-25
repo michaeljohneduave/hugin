@@ -67,13 +67,10 @@ export const scrapingTaskStatus = tool({
 		arn: z.string(),
 	}),
 	execute: async (params) => {
-		const currentTask = await db.query.Tasks.findFirst({
-			columns: {
-				arn: true,
-				id: true,
-			},
-			where: (tasks, { eq }) => eq(tasks.id, params.arn),
-		});
+		const [currentTask] = await db
+			.select()
+			.from(Tasks)
+			.where(eq(Tasks.id, params.arn));
 
 		if (!currentTask) {
 			return "Task doesn't exist";

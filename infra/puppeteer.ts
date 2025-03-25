@@ -1,5 +1,5 @@
+import { Postgres } from "./database";
 import { cluster } from "./network";
-import { Postgres } from "./postgres";
 import { POSTGRES_CONN_URI } from "./secrets";
 
 export const task = new sst.aws.Task("ScraperTask", {
@@ -7,7 +7,7 @@ export const task = new sst.aws.Task("ScraperTask", {
 	cluster: cluster,
 	image: {
 		context: ".",
-		dockerfile: "Dockerfile",
+		dockerfile: "packages/scraper/Dockerfile",
 	},
 	environment: {
 		PUPPETEER_USER_DATA_DIR: "/home/mike/.config/puppeteer",

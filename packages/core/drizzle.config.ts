@@ -6,7 +6,7 @@ import { Resource } from "sst";
 export default defineConfig({
 	dialect: "postgresql",
 	// Pick up all our schema files
-	schema: ["./packages/core/src/**/*.sql.ts"],
+	schema: ["./src/**/*.sql.ts"],
 	out: "./migrations",
 	dbCredentials: {
 		ssl: {

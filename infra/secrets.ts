@@ -3,3 +3,15 @@ export const GOOGLE_GENERATIVE_AI_API_KEY = new sst.Secret(
 );
 export const AIVEN_TOKEN = new sst.Secret("AIVEN_TOKEN");
 export const POSTGRES_CONN_URI = new sst.Secret("POSTGRES_CONN_URI");
+
+export const CLOUDFLARE_ACCOUNT_ID = new sst.Secret(
+	"CLOUDFLARE_ACCOUNT_ID",
+	process.env.CLOUDFLARE_ACCOUNT_ID,
+);
+export const CLOUDFLARE_API_TOKEN = new sst.Secret(
+	"CLOUDFLARE_API_TOKEN",
+	process.env.CLOUDFLARE_API_TOKEN,
+);
+
+export const CLERK_SECRET_KEY = new sst.Secret("CLERK_SECRET_KEY");
+export const GIPHY_API_KEY = new sst.Secret("GIPHY_API_KEY");

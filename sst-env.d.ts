@@ -9,17 +9,41 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "Api": {
+      "type": "sst.aws.ApiGatewayV2"
+      "url": string
+    }
+    "CLERK_SECRET_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "CLOUDFLARE_ACCOUNT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "CLOUDFLARE_API_TOKEN": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "ChatSite": {
       "type": "sst.aws.StaticSite"
       "url": string
+    }
+    "ClerkPublishableKey": {
+      "key": string
+      "type": "sst.sst.Linkable"
+    }
+    "GIPHY_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "GOOGLE_GENERATIVE_AI_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "MyBucket": {
+    "MessageTable": {
       "name": string
-      "type": "sst.aws.Bucket"
+      "type": "sst.aws.Dynamo"
     }
     "OurVpc": {
       "bastion": string
@@ -33,6 +57,10 @@ declare module "sst" {
       "dbName": string
       "type": "sst.sst.Linkable"
     }
+    "ScraperFn": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "ScraperTask": {
       "assignPublicIp": boolean
       "cluster": string
@@ -42,9 +70,16 @@ declare module "sst" {
       "taskDefinition": string
       "type": "sst.aws.Task"
     }
-    "companyScrapeHandler": {
-      "name": string
-      "type": "sst.aws.Function"
+    "Valkey": {
+      "host": string
+      "password": string
+      "port": number
+      "type": "sst.aws.Redis"
+      "username": string
+    }
+    "WebsocketApi": {
+      "managementEndpoint": string
+      "type": "sst.aws.ApiGatewayWebSocket"
       "url": string
     }
   }

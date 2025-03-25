@@ -5,7 +5,7 @@ import { scrapeUrl, scrapingTaskStatus } from "./tools/scraping";
 
 const toolset = {
 	queryVectorDb,
-	// transformQuery,
+	transformQuery,
 	searchUrlInDb,
 	scrapeUrl,
 	scrapingTaskStatus,

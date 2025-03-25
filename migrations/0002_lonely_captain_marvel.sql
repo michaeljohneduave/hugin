@@ -1,1 +1,0 @@
-ALTER TABLE "contents" ADD COLUMN "url" text;

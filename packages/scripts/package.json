@@ -3,7 +3,8 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "shell": "sst shell tsx"
+    "shell": "sst shell tsx",
+    "d1:migrate": "tsx src/d1-migrations.ts"
   },
   "keywords": [],
   "author": "",
