@@ -35,20 +35,34 @@ const searchQuery = ref("");
 const gifs = ref<GifResult[]>([]);
 let debouncedSearch: ReturnType<typeof funnel>;
 
+// Initialize with trending gifs
+const { data: trendingGifs } = useQuery({
+	queryKey: ["giphy-trending"],
+	queryFn: async () => {
+		return await trpc.giphy.trending.query({
+			limit: 20,
+		});
+	},
+	enabled: true,
+	staleTime: 1000 * 60 * 60,
+	refetchOnMount: true,
+});
+
 const { data: searchResults, isLoading, error, refetch } = useQuery({
 	queryKey: ["giphy-search", searchQuery],
 	queryFn: async () => {
 		if (!searchQuery.value.trim()) {
-			return await trpc.giphy.trending.query({ limit: 20 });
+			return;
 		}
+
 		return await trpc.giphy.search.query({
 			query: searchQuery.value.trim(),
 			limit: 20,
 		});
 	},
-	enabled: true,
+	enabled: Boolean(searchQuery.value.trim()),
 	staleTime: 1000 * 60 * 5, // Cache results for 5 minutes
-	refetchOnMount: true,
+	refetchOnMount: false,
 });
 
 // Update gifs ref when search results change
@@ -58,7 +72,18 @@ watch(searchResults, (newResults) => {
 	}
 });
 
-watch(searchQuery, () => {
+// Watch trending gifs and update when search is empty
+watch(trendingGifs, (newResults) => {
+	if (newResults && !searchQuery.value.trim()) {
+		gifs.value = newResults;
+	}
+});
+
+// Watch search query to handle empty state
+watch(searchQuery, (newQuery) => {
+	if (!newQuery.trim()) {
+		gifs.value = trendingGifs.value || [];
+	}
 	debouncedSearch.call();
 });
 
@@ -172,15 +197,18 @@ onMounted(() => {
 	display: grid;
 	grid-template-columns: repeat(2, 1fr);
 	gap: 8px;
+	position: relative;
+	grid-auto-rows: min-content;
 }
 
 .gif-item {
 	position: relative;
-	padding-top: 100%;
+	aspect-ratio: 1;
 	cursor: pointer;
 	border-radius: 4px;
 	overflow: hidden;
 	background: #f3f4f6;
+	width: 100%;
 }
 
 .dark .gif-item {
@@ -202,10 +230,16 @@ onMounted(() => {
 
 .loading,
 .no-results {
-	grid-column: span 2;
-	text-align: center;
-	padding: 24px;
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
 	color: #6b7280;
+	background: inherit;
 }
 
 .dark .loading,
@@ -224,6 +258,7 @@ onMounted(() => {
 	.gif-grid {
 		height: calc(50vh - 73px);
 		grid-template-columns: repeat(3, 1fr);
+		grid-auto-rows: min-content;
 	}
 }
 </style>
