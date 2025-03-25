@@ -1,33 +1,43 @@
 {
   "name": "chat",
   "version": "0.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+    "build": "run-p type-check \"build-only {@}\" --",
+    "preview": "vite preview",
+    "build-only": "vite build",
+    "type-check": "vue-tsc --build"
   },
   "dependencies": {
-    "@ai-sdk/react": "^1.1.17",
-    "@llamaindex/chat-ui": "^0.2.0",
-    "@nanostores/react": "github:ai/react",
-    "@tailwindcss/vite": "^4.0.8",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tailwindcss": "^4.0.8"
+    "@clerk/clerk-js": "^5.56.0",
+    "@clerk/vue": "^1.3.1",
+    "@giphy/js-fetch-api": "^5.6.0",
+    "@tailwindcss/postcss": "^4.0.13",
+    "@tailwindcss/vite": "^4.0.13",
+    "@tanstack/vue-query": "^5.69.0",
+    "@trpc/client": "^11.0.0",
+    "jwt-decode": "^4.0.0",
+    "lucide-vue-next": "^0.479.0",
+    "remeda": "^2.21.2",
+    "tailwindcss": "^4.0.13",
+    "tailwindcss-animate": "^1.0.7",
+    "vue": "^3.5.13",
+    "vue-router": "^4.5.0",
+    "vue3-emoji-picker": "^1.1.8"
   },
   "devDependencies": {
-    "@eslint/js": "^9.19.0",
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "eslint": "^9.19.0",
-    "eslint-plugin-react-hooks": "^5.0.0",
-    "eslint-plugin-react-refresh": "^0.4.18",
-    "globals": "^15.14.0",
-    "typescript": "~5.7.2",
-    "typescript-eslint": "^8.22.0",
-    "vite": "^6.1.0"
+    "@tsconfig/node22": "^22.0.0",
+    "@types/lodash": "^4.17.16",
+    "@types/lodash-es": "^4.17.12",
+    "@types/node": "^22.13.9",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/tsconfig": "^0.7.0",
+    "npm-run-all2": "^7.0.2",
+    "typescript": "~5.8.0",
+    "vite": "^6.2.1",
+    "vite-plugin-vue-devtools": "^7.7.2",
+    "vue-tsc": "^2.2.8"
   }
 }

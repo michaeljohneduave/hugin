@@ -16,6 +16,9 @@
   "[typescriptreact]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
+  "[vue]": {
+    "editor.defaultFormatter": "Vue.volar"
+  },
   "[html]": {
     "editor.defaultFormatter": "biomejs.biome"
   },
@@ -30,6 +33,15 @@
   },
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
-    "quickFix.biome": "explicit",
-  }
+    "source.fixAll": "always",
+  },
+  "explorer.fileNesting.enabled": true,
+  "explorer.fileNesting.patterns": {
+    "tsconfig.json": "tsconfig.*.json, env.d.ts",
+    "vite.config.*": "jsconfig*, vitest.config.*, cypress.config.*, playwright.config.*",
+    "package.json": "package-lock.json, pnpm*, .yarnrc*, yarn*, .eslint*, eslint*, .prettier*, prettier*, .editorconfig"
+  },
+  "css.customData": [
+    ".vscode/tailwind.json"
+  ]
 }
