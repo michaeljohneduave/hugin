@@ -227,7 +227,7 @@ const formatTime = (timestamp: number) => {
         year: new Date(message.timestamp).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
       })">
         <!-- Message text -->
-        <div v-if="message.message" class="text mb-1.5 break-words">{{ message.message }}</div>
+        <div v-if="message.message" class="text break-words">{{ message.message }}</div>
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">

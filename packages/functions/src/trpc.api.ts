@@ -149,7 +149,6 @@ export const appRouter = router({
 				})
 				.go({
 					limit: 50,
-					order: "desc",
 				});
 
 			return messages.data;
