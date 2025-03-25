@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import type { User } from "./GroupChat.vue";
+import type { User } from "../pages/Chat.vue";
 
 const props = defineProps<{
 	currentUserId?: string;

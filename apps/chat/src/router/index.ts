@@ -4,9 +4,9 @@ import {
 	createRouter,
 	createWebHistory,
 } from "vue-router";
-import GroupChat from "../components/GroupChat.vue";
 import LoginPage from "../components/LoginPage.vue";
 import { useAuth } from "../composables/useAuth";
+import Chat from "../pages/Chat.vue";
 import { getAuthService } from "../services/auth";
 
 const router = createRouter({
@@ -14,7 +14,7 @@ const router = createRouter({
 	routes: [
 		{
 			path: "/",
-			component: GroupChat,
+			component: Chat,
 			meta: { requiresAuth: true },
 		},
 		{

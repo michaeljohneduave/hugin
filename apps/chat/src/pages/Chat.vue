@@ -4,6 +4,8 @@ import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
+import Message, { type ChatPayloadUser } from "@/components/Message.vue";
+import Sidebar from "@/components/Sidebar.vue"
 import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
 import type { ChatPayload, MessagePayload } from "@hugin-bot/functions/src/types";
 import {
@@ -25,14 +27,14 @@ import {
 	Video as VideoIcon,
 	X as XIcon,
 } from "lucide-vue-next";
-import { type Ref, computed, nextTick, onMounted, onUnmounted, ref, useTransitionState, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import MessageInput from "../components/MessageInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { useTheme } from '../composables/useTheme';
 import type { AuthUser } from "../services/auth";
 import ChatList from "./ChatList.vue";
 import FilePreview from "./FilePreview.vue";
 import GifPicker from './GifPicker.vue'
-import Message, { type ChatPayloadUser } from "./Message.vue";
 import ModelList from "./ModelList.vue";
 import RecordAudio from "./RecordAudio.vue";
 import UserList from "./UserList.vue";
@@ -76,7 +78,7 @@ const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const replyingTo = ref<Reply | null>(null);
 const showMentionSuggestions = ref(false);
 const rooms = ref<RouterOutput["roomsWithLastMessage"]>([]);
-const roomMembers = ref<Record<string, { id: string; name: string; avatar?: string; type: "human" }>>({});
+const roomMembers = ref<Record<string, RouterOutput["roomMembers"][number]>>({});
 
 // Transform rooms data to match Chat type
 const formattedRooms = computed(() => {
@@ -105,8 +107,8 @@ const formattedRooms = computed(() => {
 });
 
 // Replace the currentUser ref with auth
-const { user: currentUser, isLoading: isAuthLoading, token, error: authError, signIn, signOut } = useAuth();
-const { session, isLoaded } = useSession();
+const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();
+const { session } = useSession();
 const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler } = useWebsocket();
 const trpc = useTrpc();
 
@@ -211,12 +213,7 @@ const handleScroll = () => {
 	isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 100;
 };
 
-// Function to update room members
-const updateRoomMembers = (members: RouterOutput["roomMembers"]) => {
-	for (const member of members) {
-		roomMembers.value[member.id] = member;
-	}
-};
+
 
 // Function to fetch messages for a room
 const fetchMessages = async (roomId: string) => {
@@ -695,6 +692,41 @@ const handleAudioStop = (audioUrl: string) => {
 	audioRecording.value = audioUrl;
 };
 
+// Function to update room members
+const updateRoomMembers = (members: RouterOutput["roomMembers"]) => {
+	const updatedMembers: Record<string, RouterOutput["roomMembers"][number]> = {};
+	for (const member of members) {
+		updatedMembers[member.id] = member;
+	}
+	roomMembers.value = updatedMembers;
+};
+
+// Add createNewAiChat handler
+const handleCreateNewAiChat = async () => {
+	if (!currentUser.value) return;
+
+	try {
+		// Create a new room with type 'llm'
+		const newRoom = await trpc.createAiRoom.mutate({
+			type: 'llm',
+			name: 'New Chat', // Default name
+			userId: currentUser.value.id,
+		});
+
+		// Add the new room to the rooms list
+		rooms.value = [{
+			...newRoom,
+		}, ...rooms.value];
+
+		// Switch to the new room
+		currentChatId.value = newRoom.roomId;
+		await fetchRoomMembers(newRoom.roomId);
+		await fetchMessages(newRoom.roomId);
+	} catch (error) {
+		console.error('Error creating new AI chat:', error);
+	}
+};
+
 </script>
 
 <template>
@@ -705,7 +737,6 @@ const handleAudioStop = (audioUrl: string) => {
 		<div class="text-red-500">Error: {{ authError.message }}</div>
 	</div>
 	<div v-else class="flex h-[var(--vh,100vh)] bg-gray-100 dark:bg-gray-900">
-
 		<!-- Sidebar -->
 		<div class="fixed inset-0 z-40 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out"
 			:class="[isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full']">
@@ -713,51 +744,9 @@ const handleAudioStop = (audioUrl: string) => {
 			<div class="absolute inset-0 bg-gray-900/50 md:hidden" @click="isMobileMenuOpen = false"></div>
 
 			<!-- Sidebar content -->
-			<div class="relative w-64 h-full bg-white dark:bg-gray-800 shadow-lg flex flex-col">
-				<!-- User section -->
-				<div class="h-16 flex items-center justify-between px-4 border-b dark:border-gray-700">
-					<div class="flex items-center space-x-3">
-						<div class="relative">
-							<img :src="currentUser?.avatar" alt="" class="h-8 w-8 rounded-full">
-							<div class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-gray-800"
-								:class="isOnline ? 'bg-green-500' : 'bg-red-500'"></div>
-						</div>
-						<div>
-							<div class="font-medium">{{ currentUser?.name }}</div>
-							<div class="text-sm text-gray-500">{{ isOnline ? "Online" : "Offline" }}</div>
-						</div>
-					</div>
-					<div class="relative">
-						<button @click="showUserMenu = !showUserMenu"
-							class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full">
-							<MoreHorizontalIcon class="h-5 w-5" />
-						</button>
-						<!-- User menu dropdown -->
-						<div v-if="showUserMenu"
-							class="absolute right-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 z-50">
-							<div class="py-1">
-								<button @click="toggleTheme"
-									class="flex w-full items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-									<SunIcon v-if="isDarkMode" class="h-4 w-4 mr-2" />
-									<MoonIcon v-else class="h-4 w-4 mr-2" />
-									<span>{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</span>
-								</button>
-								<button @click="handleLogout"
-									class="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
-									<LogOutIcon class="h-4 w-4 mr-2" />
-									<span>Logout</span>
-								</button>
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Chat list -->
-				<div class="flex-1 overflow-y-auto">
-					<ChatList :rooms="formattedRooms" :currentChatId="currentChatId" @select="handleChatSelect" />
-					<ModelList :llms="availableLLMs" />
-				</div>
-			</div>
+			<Sidebar :currentChatId="currentChatId" :rooms="formattedRooms" :isMobileMenuOpen="isMobileMenuOpen"
+				:isOnline="isOnline" @selectChat="handleChatSelect" @createNewAiChat="handleCreateNewAiChat"
+				@toggleMobileMenu="isMobileMenuOpen = !isMobileMenuOpen" />
 		</div>
 
 		<!-- Main content -->
@@ -792,175 +781,8 @@ const handleAudioStop = (audioUrl: string) => {
 			</div>
 
 			<!-- Input area -->
-			<div class="p-2 sm:p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700"
-				:class="{ 'pb-safe': isKeyboardOpen }">
-				<form @submit.prevent="sendMessage" class="flex flex-col space-y-2">
-					<!-- Replies/references indicator -->
-					<div v-if="replyingTo"
-						class="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded text-sm">
-						<div class="flex items-center">
-							<ReplyIcon class="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
-							<span>Replying to <span class="font-medium">{{ replyingTo.sender.name }}</span></span>
-						</div>
-						<button type="button" @click="replyingTo = null"
-							class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">
-							<XIcon class="h-4 w-4" />
-						</button>
-					</div>
-
-					<!-- Input with attachments row -->
-					<div class="flex items-center space-x-2">
-						<button type="button" @click="toggleAttachmentMenu"
-							class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-							<PlusIcon class="h-5 w-5" />
-						</button>
-
-						<!-- Attachment menu popup -->
-						<div v-if="showAttachmentMenu"
-							class="absolute bottom-20 left-4 sm:left-72 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border dark:border-gray-700">
-							<div class="py-1">
-								<label
-									class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-									<FileIcon class="h-4 w-4 mr-2" />
-									<span>Upload file</span>
-									<input type="file" class="hidden" @change="handleFileUpload" />
-								</label>
-								<!-- <button type="button" @click="startRecording"
-									class="flex w-full items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-									<MicIcon class="h-4 w-4 mr-2" />
-									<span>Record audio</span>
-								</button> -->
-							</div>
-						</div>
-
-						<div class="flex-1 relative">
-							<textarea v-model="messageInput" rows="1" placeholder="Type a message..."
-								class="w-full px-3 py-2 text-base border dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-								@input="autoResize" @keydown.enter.exact.prevent="sendMessage" ref="textareaRef"></textarea>
-
-							<!-- @ mention suggestions -->
-							<div v-if="showMentionSuggestions"
-								class="absolute bottom-full mb-2 w-64 bg-white dark:bg-gray-800 rounded-md shadow-lg border dark:border-gray-700 max-h-60 overflow-y-auto z-10">
-								<div class="p-2">
-									<h3 class="text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">AI Assistants</h3>
-									<div v-for="llm in filteredMentions" :key="llm.id" @click="insertMention(llm)"
-										class="px-3 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded cursor-pointer flex items-center">
-										<div
-											class="w-6 h-6 rounded-full bg-indigo-100 dark:bg-indigo-900 flex items-center justify-center mr-2">
-											<BotIcon class="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
-										</div>
-										<span>{{ llm.name }}</span>
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<div class="relative">
-							<button type="button" @click="showEmojiPicker = !showEmojiPicker"
-								class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-								<SmileIcon class="h-5 w-5" />
-							</button>
-
-							<div v-if="showEmojiPicker" class="absolute bottom-12 right-0 z-50">
-								<div class="fixed inset-0" @click="showEmojiPicker = false"></div>
-								<div class="relative">
-									<div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700">
-										<EmojiPicker :dark="isDarkMode" @select="insertEmoji" />
-									</div>
-								</div>
-							</div>
-						</div>
-
-						<div class="relative">
-							<button type="button" @click="showGifPicker = !showGifPicker"
-								class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-								<ImageIcon class="h-5 w-5" />
-							</button>
-
-							<!-- Desktop GIF picker -->
-							<div v-show="showGifPicker" class="absolute bottom-12 right-0 z-50 hidden md:block">
-								<div class="fixed inset-0 bg-black/20 dark:bg-black/40" @click="showGifPicker = false"></div>
-								<div class="relative">
-									<GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
-								</div>
-							</div>
-						</div>
-
-						<button type="submit" class="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
-							:disabled="!messageInput.trim() && !selectedFile && !selectedVideoFile && !selectedAudioFile && !audioRecording">
-							<SendIcon class="h-5 w-5" />
-						</button>
-					</div>
-
-					<!-- Mobile GIF picker -->
-					<div v-show="showGifPicker" class="md:hidden fixed bottom-0 left-0 right-0 z-50">
-						<div class="fixed inset-0 bg-black/20 dark:bg-black/40" @click="showGifPicker = false"></div>
-						<div class="relative">
-							<GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
-						</div>
-					</div>
-
-					<!-- File preview -->
-					<FilePreview v-if="selectedFile" :fileName="selectedFile.name" :onRemove="() => removeFile('image')" />
-					<FilePreview v-if="selectedVideoFile" :fileName="selectedVideoFile.name"
-						:onRemove="() => removeFile('video')" />
-					<FilePreview v-if="selectedAudioFile" :fileName="selectedAudioFile.name"
-						:onRemove="() => removeFile('audio')" />
-
-					<!-- Audio recording UI -->
-					<div v-if="isRecording" class="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded">
-						<div class="flex items-center">
-							<div class="h-3 w-3 bg-red-500 rounded-full animate-pulse mr-2"></div>
-							<span class="text-sm text-gray-700 dark:text-gray-300">Recording... {{ recordingTime }}s</span>
-						</div>
-						<div class="flex space-x-2">
-							<button type="button" @click="stopRecording"
-								class="p-1 text-gray-700 dark:text-gray-300 hover:text-primary">
-								<StopCircleIcon class="h-5 w-5" />
-							</button>
-							<button type="button" @click="cancelRecording"
-								class="p-1 text-gray-700 dark:text-gray-300 hover:text-red-500">
-								<XIcon class="h-5 w-5" />
-							</button>
-						</div>
-					</div>
-
-					<!-- Audio preview -->
-					<div v-if="audioRecording && !isRecording"
-						class="flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded">
-						<div class="flex items-center flex-1">
-							<MicIcon class="h-4 w-4 mr-2 text-gray-500 dark:text-gray-400" />
-							<RecordAudio :isDarkMode="isDarkMode" @start="startRecording" @stop="handleAudioStop" />
-						</div>
-						<button type="button" @click="removeAudio"
-							class="p-1 text-gray-500 dark:text-gray-400 hover:text-red-500 ml-2">
-							<XIcon class="h-4 w-4" />
-						</button>
-					</div>
-				</form>
-			</div>
-		</div>
-
-		<!-- User list sidebar (mobile) -->
-		<div class="fixed inset-0 z-40 transform transition-transform duration-300 ease-in-out md:hidden"
-			:class="[isSidebarOpen ? 'translate-x-0' : 'translate-x-full']">
-			<!-- Backdrop -->
-			<div class="absolute inset-0 bg-gray-900/50" @click="isSidebarOpen = false"></div>
-
-			<!-- Content -->
-			<div class="absolute right-0 w-64 h-full bg-white dark:bg-gray-800 shadow-lg">
-				<div class="p-4 border-b dark:border-gray-700">
-					<div class="flex items-center justify-between">
-						<h3 class="text-lg font-medium">Users</h3>
-						<button class="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full" @click="isSidebarOpen = false">
-							<XIcon class="h-5 w-5" />
-						</button>
-					</div>
-				</div>
-				<div class="p-4">
-					<UserList :users="Object.values(roomMembers)" />
-				</div>
-			</div>
+			<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :isDarkMode="isDarkMode"
+				@sendMessage="sendSocketMsg" />
 		</div>
 	</div>
 </template>

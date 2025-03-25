@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { BotIcon } from "lucide-vue-next";
-import type { LLM } from "./GroupChat.vue";
+import type { AuthUser } from "../services/auth";
+
 const props = defineProps<{
-  llms: LLM[];
+  llms: AuthUser[];
 }>();
 </script>
 

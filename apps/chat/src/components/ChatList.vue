@@ -1,12 +1,13 @@
 <script setup lang="ts">
-import { Hash, MessageSquare } from "lucide-vue-next";
+import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
+import { Bot, Hash, MessageSquare } from "lucide-vue-next";
 import { ref } from "vue";
 
 export type Chat = {
   roomId: string;
   userId: string;
   name?: string;
-  type: "group" | "dm";
+  type: "group" | "dm" | "llm";
   createdAt: number;
   updatedAt: number;
   user: {
@@ -22,12 +23,13 @@ export type Chat = {
     videoFiles?: string[];
     audioFiles?: string[];
     createdAt: number;
+    type: "llm" | "user" | "event";
   };
 };
 
 const props = defineProps<{
   currentChatId?: string;
-  rooms: Chat[];
+  rooms: RouterOutput["roomsWithLastMessage"];
 }>();
 
 const emit = defineEmits<{
@@ -71,6 +73,7 @@ function formatRelativeTime(timestamp: number): string {
       :class="{ 'bg-gray-50 dark:bg-gray-800': chat.roomId === currentChatId }">
       <div class="flex-shrink-0 w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
         <Hash v-if="chat.type === 'group'" class="w-6 h-6 text-gray-500 dark:text-gray-400" />
+        <Bot v-else-if="chat.type === 'llm'" class="w-6 h-6 text-gray-500 dark:text-gray-400" />
         <MessageSquare v-else class="w-6 h-6 text-gray-500 dark:text-gray-400" />
       </div>
       <div class="flex-1 min-w-0">

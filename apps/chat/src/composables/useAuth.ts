@@ -24,7 +24,6 @@ export function useAuth() {
 	}
 
 	async function getToken() {
-		const resource = await authService.getClerkInstance()?.session?.touch();
 		return await authService.getToken();
 	}
 
