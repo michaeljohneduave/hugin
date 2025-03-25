@@ -68,64 +68,59 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 		const connectionId = event.requestContext.connectionId;
 
 		if (!token) {
+			console.log("Token not found");
 			return {
 				statusCode: 401,
 			};
 		}
 
 		if (!connectionId) {
+			console.log("ConnectionId not found");
 			return {
 				statusCode: 400,
 			};
 		}
 
-		try {
-			const verifiedToken = await clerkVerifyToken(token, {
-				secretKey: Resource.CLERK_SECRET_KEY.value,
-				authorizedParties: [
-					"http://localhost:5173",
-					"https://chat.meduave.com",
-					// Add chat app domain here
-				],
+		const verifiedToken = await clerkVerifyToken(token, {
+			secretKey: Resource.CLERK_SECRET_KEY.value,
+			authorizedParties: [
+				"http://localhost:5173",
+				"https://chat.meduave.com",
+				// Add chat app domain here
+			],
+		});
+
+		const rooms = await RoomEntity.query
+			.byUser({
+				userId: verifiedToken.sub,
+			})
+			.go({
+				pages: "all",
 			});
 
-			const rooms = await RoomEntity.query
-				.byUser({
-					userId: verifiedToken.sub,
-				})
-				.go({
-					pages: "all",
-				});
-
-			// We want to make this connect handler "very" fast
-			// For now just warn that the user will be joining >100 rooms
-			// Let future Michael handle the optimization of joining >100 rooms
-			if (rooms.data.length > 100) {
-				console.log("User is in 100 rooms");
-			}
-
-			await refreshRedisConnectionId(
-				verifiedToken.sub,
-				token,
-				connectionId,
-				true,
-			);
-
-			let pipeline = redis.pipeline();
-
-			for (const room of rooms.data) {
-				pipeline = pipeline.sadd(`room:${room.roomId}:members`, [
-					verifiedToken.sub,
-				]);
-			}
-
-			await pipeline.exec();
-		} catch (error) {
-			console.error(error);
-			return {
-				statusCode: 500,
-			};
+		// We want to make this connect handler "very" fast
+		// For now just warn that the user will be joining >100 rooms
+		// Let future Michael handle the optimization of joining >100 rooms
+		if (rooms.data.length > 100) {
+			console.log("User is in 100 rooms");
 		}
+
+		await refreshRedisConnectionId(
+			verifiedToken.sub,
+			token,
+			connectionId,
+			true,
+		);
+
+		let pipeline = redis.pipeline();
+
+		for (const room of rooms.data) {
+			pipeline = pipeline.sadd(`room:${room.roomId}:members`, [
+				verifiedToken.sub,
+			]);
+		}
+
+		await pipeline.exec();
 
 		return {
 			statusCode: 200,
@@ -273,6 +268,7 @@ export const sendMessage = async (
 		throw new Error("Jwt token not found");
 	}
 
+	console.log("decoding token", token);
 	const jwtPayload = decodeJwt(token);
 	const userIds = await redis.smembers(`room:${payload.roomId}:members`);
 	let pipeline = redis.pipeline();

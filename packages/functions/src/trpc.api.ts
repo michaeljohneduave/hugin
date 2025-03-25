@@ -92,11 +92,11 @@ export const appRouter = router({
 
 			const groupedMessages = groupBy(res.data.message, prop("roomId"));
 			const rooms = res.data.room.map((room) => {
-				const arr = groupedMessages[room.roomId];
+				const msg = groupedMessages[room.roomId].pop();
 
 				return {
 					...room,
-					lastMessage: arr[arr.length - 1],
+					lastMessage: msg,
 				};
 			});
 
@@ -149,9 +149,10 @@ export const appRouter = router({
 				})
 				.go({
 					limit: 50,
+					order: "desc",
 				});
 
-			return messages.data;
+			return messages.data.reverse();
 		}),
 	greet: publicProcedure
 		.input(z.object({ name: z.string() }))
