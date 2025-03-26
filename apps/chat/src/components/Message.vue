@@ -4,8 +4,19 @@ import { useSession } from "@clerk/vue"
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
-import { computed } from 'vue';
+import Prism from 'prismjs';
+import { computed, onMounted } from 'vue';
 import type { AuthUser } from '../services/auth';
+import 'prismjs/themes/prism.css';
+import 'prismjs/components/prism-typescript';
+import 'prismjs/components/prism-javascript';
+import 'prismjs/components/prism-jsx';
+import 'prismjs/components/prism-tsx';
+import 'prismjs/components/prism-bash';
+import 'prismjs/components/prism-json';
+import 'prismjs/components/prism-css';
+import 'prismjs/components/prism-markdown';
+import { Check, Copy } from 'lucide-vue-next';
 
 export type ChatPayloadUser = ChatPayload & {
   user?: {
@@ -175,6 +186,28 @@ const formatTime = (timestamp: number) => {
 
 // Configure marked options for safe rendering
 const renderer = new marked.Renderer();
+
+// Custom code block renderer
+renderer.code = (code: { text: string; lang?: string }) => {
+  const validLanguage = code.lang && Prism.languages[code.lang] ? code.lang : 'plaintext';
+  const highlightedCode = Prism.highlight(
+    code.text,
+    Prism.languages[validLanguage],
+    validLanguage
+  );
+
+  return `<pre class="code-block" data-language="${validLanguage}">
+    <div class="code-block-header">
+      <span class="code-block-language">${validLanguage}</span>
+      <button class="copy-button" aria-label="Copy code">
+        <span class="copy-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg></span>
+        <span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
+      </button>
+    </div>
+    <code class="language-${validLanguage}">${highlightedCode}</code>
+  </pre>`;
+};
+
 marked.setOptions({
   renderer: renderer,
   gfm: true, // GitHub Flavored Markdown
@@ -189,6 +222,32 @@ const renderMarkdown = computed(() => {
   // Then render markdown and sanitize the output again
   const htmlContent = marked.parse(sanitizedInput, { async: false }) as string;
   return DOMPurify.sanitize(htmlContent);
+});
+
+// Add copy functionality
+onMounted(() => {
+  // Add click handler for copy buttons
+  document.addEventListener('click', (e) => {
+    const target = e.target as HTMLElement;
+    const copyButton = target.closest('.copy-button');
+
+    if (copyButton) {
+      const codeBlock = copyButton.closest('.code-block');
+      if (codeBlock) {
+        const code = codeBlock.querySelector('code');
+        if (code) {
+          // Copy the code
+          navigator.clipboard.writeText(code.textContent || '');
+
+          // Show feedback
+          copyButton.classList.add('copied');
+          setTimeout(() => {
+            copyButton.classList.remove('copied');
+          }, 2000);
+        }
+      }
+    }
+  });
 });
 
 </script>
@@ -294,4 +353,271 @@ const renderMarkdown = computed(() => {
 
 <style scoped>
 /* Add any component-specific styles here */
+
+/* Code block styles */
+:deep(.code-block) {
+  margin: 0.5rem 0;
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: #1e1e1e;
+  overflow-x: auto;
+  font-family: 'Fira Code', monospace;
+  font-size: 0.875rem;
+  line-height: 1.5;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  white-space: pre;
+  word-wrap: normal;
+  -webkit-overflow-scrolling: touch;
+  position: relative;
+}
+
+:deep(.code-block code) {
+  color: #d4d4d4;
+  background: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  text-shadow: none;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+  display: block;
+  min-width: min-content;
+  white-space: pre;
+  word-wrap: normal;
+}
+
+:deep(.code-block-header) {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+:deep(.code-block-language) {
+  font-size: 0.75rem;
+  color: #888;
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+:deep(.dark .code-block-language) {
+  color: #aaa;
+}
+
+:deep(.copy-button) {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #888;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+}
+
+:deep(.copy-button:hover) {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+:deep(.copy-button .copy-icon),
+:deep(.copy-button .check-icon) {
+  position: absolute;
+  transition: all 0.2s ease;
+}
+
+:deep(.copy-button .check-icon) {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+:deep(.copy-button.copied .copy-icon) {
+  opacity: 0;
+  transform: scale(0.8);
+}
+
+:deep(.copy-button.copied .check-icon) {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* Dark mode adjustments */
+:deep(.dark .code-block) {
+  background-color: #1a1a1a;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Scrollbar styling for code blocks */
+:deep(.code-block::-webkit-scrollbar) {
+  height: 8px;
+  width: 8px;
+}
+
+:deep(.code-block::-webkit-scrollbar-track) {
+  background: #2d2d2d;
+  border-radius: 4px;
+}
+
+:deep(.code-block::-webkit-scrollbar-thumb) {
+  background: #4d4d4d;
+  border-radius: 4px;
+}
+
+:deep(.code-block::-webkit-scrollbar-thumb:hover) {
+  background: #5d5d5d;
+}
+
+/* Ensure code block doesn't overflow its container */
+:deep(.prose pre) {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+/* Ensure code block content is properly contained */
+:deep(.prose pre code) {
+  max-width: none;
+  overflow-x: auto;
+}
+
+/* Syntax highlighting adjustments */
+:deep(.token.comment),
+:deep(.token.prolog),
+:deep(.token.doctype),
+:deep(.token.cdata) {
+  color: #6a9955;
+  background: none;
+}
+
+:deep(.token.punctuation),
+:deep(.token.operator),
+:deep(.token.entity),
+:deep(.token.url),
+:deep(.language-css .token.string),
+:deep(.style .token.string) {
+  color: #d4d4d4;
+  background: none;
+}
+
+:deep(.token.property),
+:deep(.token.tag),
+:deep(.token.boolean),
+:deep(.token.number),
+:deep(.token.constant),
+:deep(.token.symbol) {
+  color: #b5cea8;
+  background: none;
+}
+
+:deep(.token.selector),
+:deep(.token.string),
+:deep(.token.char),
+:deep(.token.builtin) {
+  color: #ce9178;
+  background: none;
+}
+
+:deep(.token.keyword),
+:deep(.token.control),
+:deep(.token.directive),
+:deep(.token.unit) {
+  color: #569cd6;
+  background: none;
+}
+
+:deep(.token.function) {
+  color: #dcdcaa;
+  background: none;
+}
+
+:deep(.token.class-name) {
+  color: #4ec9b0;
+  background: none;
+}
+
+:deep(.token.variable) {
+  color: #9cdcfe;
+  background: none;
+}
+
+:deep(.token.important),
+:deep(.token.bold),
+:deep(.token.italic) {
+  color: #c586c0;
+  background: none;
+}
+
+:deep(.token.atrule),
+:deep(.token.attr-value) {
+  color: #ce9178;
+  background: none;
+}
+
+:deep(.token.regex) {
+  color: #d16969;
+  background: none;
+}
+
+:deep(.token.namespace) {
+  color: #4ec9b0;
+  background: none;
+}
+
+:deep(.token.deleted) {
+  color: #ce9178;
+  background: none;
+}
+
+:deep(.token.inserted) {
+  color: #b5cea8;
+  background: none;
+}
+
+:deep(.token.changed) {
+  color: #569cd6;
+  background: none;
+}
+
+/* Ensure no background on any token */
+:deep(.token) {
+  background: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Remove duplicate token styles */
+:deep(.token.operator),
+:deep(.token.entity),
+:deep(.token.url),
+:deep(.language-css .token.string),
+:deep(.style .token.string),
+:deep(.token.variable),
+:deep(.token.control),
+:deep(.token.directive),
+:deep(.token.unit) {
+  color: #d4d4d4 !important;
+  background: none !important;
+  text-shadow: none !important;
+  box-shadow: none !important;
+}
+
+/* Inline code styling */
+:deep(code:not(.code-block code)) {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  font-size: 85%;
+  background-color: rgba(175, 184, 193, 0.2);
+  border-radius: 6px;
+  font-family: 'Fira Code', monospace;
+  color: #24292e;
+}
+
+:deep(.dark code:not(.code-block code)) {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #e1e1e1;
+}
 </style>
