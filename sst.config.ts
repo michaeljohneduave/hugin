@@ -31,7 +31,6 @@ export default $config({
 
 		const dns = await import("./infra/dns");
 		const api = await import("./infra/api");
-		const websocket = await import("./infra/websocket");
 		await import("./infra/local");
 		const { clerkPublishableKey } = await import("./infra/config");
 
@@ -50,7 +49,7 @@ export default $config({
 					: null,
 			environment: {
 				VITE_TRPC_URL: $interpolate`${api.api.url}/trpc`,
-				VITE_WEBSOCKET_API_URL: websocket.websocketApi.url,
+				VITE_WEBSOCKET_API_URL: api.websocketApi.url,
 				VITE_CLERK_PUBLISHABLE_KEY: clerkPublishableKey.properties.key,
 			},
 			dev: {
@@ -60,7 +59,7 @@ export default $config({
 
 		return {
 			ApiUrl: api.api.url,
-			WsUrl: websocket.websocketApi.url,
+			WsUrl: api.websocketApi.url,
 			Chat: chatSite.url,
 		};
 	},

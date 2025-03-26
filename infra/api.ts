@@ -1,5 +1,6 @@
-import { MessageTable, Postgres } from "./database";
+import { MessageTable, Postgres, Valkey } from "./database";
 import { domain } from "./dns";
+import { vpc } from "./network";
 import { task } from "./puppeteer";
 import {
 	CLERK_SECRET_KEY,
@@ -44,15 +45,63 @@ export const scraperFn = new sst.aws.Function("ScraperFn", {
 	link: [task, Postgres, POSTGRES_CONN_URI, GOOGLE_GENERATIVE_AI_API_KEY],
 });
 
-// export const trpcFn = new sst.aws.Function("TrpcFn", {
-// 	handler: "packages/functions/src/api.handler",
-// 	url: true,
-// 	link: [MessageTable, CLERK_SECRET_KEY],
-// });
+export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
+	domain:
+		$app.stage === "prod"
+			? {
+					name: `hugin-ws.${domain}`,
+					dns: sst.cloudflare.dns({}),
+				}
+			: null,
+});
 
-// export const router = new sst.aws.Router("Router", {
-// 	routes: {
-// 		"/api/trpc/*": trpcFn.url,
-// 		"/ws/*": websocketApi.url,
-// 	},
-// });
+const wsFnLinks = [
+	task,
+	Postgres,
+	POSTGRES_CONN_URI,
+	GOOGLE_GENERATIVE_AI_API_KEY,
+	websocketApi,
+	Valkey,
+	MessageTable,
+	CLERK_SECRET_KEY,
+];
+
+websocketApi.route("$connect", {
+	vpc,
+	link: wsFnLinks,
+	handler: "packages/functions/src/websocket.connect",
+	transform: {
+		function: {
+			memorySize: 256,
+		},
+	},
+});
+
+websocketApi.route("$disconnect", {
+	vpc,
+	link: wsFnLinks,
+	handler: "packages/functions/src/websocket.disconnect",
+	transform: {
+		function: {
+			memorySize: 128,
+		},
+	},
+});
+
+websocketApi.route("$default", {
+	vpc,
+	link: wsFnLinks,
+	handler: "packages/functions/src/websocket.$default",
+	transform: {
+		function: {
+			memorySize: 256,
+		},
+	},
+	permissions: [
+		{
+			actions: ["execute-api:ManageConnections"],
+			effect: "allow",
+			resources: ["arn:aws:execute-api:*:*:*"],
+		},
+	],
+});
