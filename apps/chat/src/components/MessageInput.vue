@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
+import type { Bot } from '@/pages/Chat.vue';
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import {
   File as FileIcon,
@@ -16,6 +17,7 @@ import GifPicker from './GifPicker.vue';
 const props = defineProps<{
   currentUser: AuthUser | null;
   currentChatId: string;
+  availableBots: Bot[];
   isDarkMode: boolean;
 }>();
 
@@ -35,6 +37,13 @@ const selectedFile = ref<File | null>(null);
 const selectedVideoFile = ref<File | null>(null);
 const selectedAudioFile = ref<File | null>(null);
 const audioRecording = ref<string | null>(null);
+
+// Add bot-related state
+const showBotSuggestions = ref(false);
+const taggedBot = ref<Bot | null>(null);
+const selectedBotIndex = ref(0); // Track currently selected bot in the dropdown
+
+// Temporary bot for testing
 
 // Auto-resize textarea
 const autoResize = () => {
@@ -113,11 +122,78 @@ const selectAndSendGif = (url: string) => {
     senderId: props.currentUser.id,
     roomId: props.currentChatId,
     timestamp: Date.now(),
-    imageFiles: [url]
+    imageFiles: [url],
+    type: "user",
   };
 
   showGifPicker.value = false;
   emit('sendMessage', message);
+};
+
+// Handle input changes for bot tagging
+const handleInput = (event: Event) => {
+  const textarea = event.target as HTMLTextAreaElement;
+  const text = textarea.value;
+  const lastChar = text[textarea.selectionStart - 1];
+
+  if (lastChar === '@') {
+    showBotSuggestions.value = true;
+    selectedBotIndex.value = 0; // Reset selection when showing suggestions
+  }
+
+  autoResize();
+};
+
+// Handle keyboard navigation for bot suggestions
+const handleKeydown = (event: KeyboardEvent) => {
+  if (!showBotSuggestions.value) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+    return;
+  }
+
+  switch (event.key) {
+    case 'ArrowUp':
+      event.preventDefault();
+      selectedBotIndex.value = (selectedBotIndex.value - 1 + props.availableBots.length) % props.availableBots.length;
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      selectedBotIndex.value = (selectedBotIndex.value + 1) % props.availableBots.length;
+      break;
+    case 'Enter':
+      event.preventDefault();
+      if (showBotSuggestions.value) {
+        selectBot(props.availableBots[selectedBotIndex.value]);
+      } else {
+        sendMessage();
+      }
+      break;
+    case 'Escape':
+      event.preventDefault();
+      showBotSuggestions.value = false;
+      break;
+  }
+};
+
+// Handle bot selection
+const selectBot = (bot: Bot) => {
+  const beforeCursor = messageInput.value.slice(0, textareaRef.value?.selectionStart || 0);
+  const afterCursor = messageInput.value.slice(textareaRef.value?.selectionStart || 0);
+
+  // Replace the @ with the bot tag using template literals
+  messageInput.value = `${beforeCursor.slice(0, -1)}@${bot.name} ${afterCursor}`;
+  taggedBot.value = bot;
+  showBotSuggestions.value = false;
+
+  // Refocus the textarea and move cursor to the end
+  nextTick(() => {
+    textareaRef.value?.focus();
+    const length = messageInput.value.length;
+    textareaRef.value?.setSelectionRange(length, length);
+  });
 };
 
 // Send message
@@ -136,6 +212,7 @@ const sendMessage = () => {
     senderId: props.currentUser.id,
     roomId: props.currentChatId,
     timestamp: Date.now(),
+    type: "user",
     ...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
       ? {
         imageFiles,
@@ -144,15 +221,30 @@ const sendMessage = () => {
       }
       : {
         message: messageInput.value,
+        taggedBotId: taggedBot.value?.id
       }),
   };
 
+  if (taggedBot.value) {
+    message.mentions = [
+      taggedBot.value.id
+    ]
+  }
+
   emit('sendMessage', message);
   messageInput.value = '';
+  taggedBot.value = null;
   selectedFile.value = null;
   selectedVideoFile.value = null;
   selectedAudioFile.value = null;
   audioRecording.value = null;
+
+  // Reset textarea height
+  nextTick(() => {
+    if (textareaRef.value) {
+      textareaRef.value.style.height = 'auto';
+    }
+  });
 };
 
 // Add click outside handler
@@ -207,7 +299,18 @@ onUnmounted(() => {
         <div class="flex-1 relative">
           <textarea v-model="messageInput" rows="1" placeholder="Type a message..."
             class="w-full px-3 py-2 text-base border dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-            @input="autoResize" @keydown.enter.exact.prevent="sendMessage" ref="textareaRef"></textarea>
+            @input="handleInput" @keydown="handleKeydown" ref="textareaRef"></textarea>
+
+          <!-- Bot suggestions dropdown -->
+          <div v-if="showBotSuggestions"
+            class="absolute bottom-full left-0 mb-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 max-h-48 overflow-y-auto">
+            <div v-for="(bot, index) in availableBots" :key="bot.id" @click="selectBot(bot)"
+              class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+              :class="{ 'bg-gray-100 dark:bg-gray-700': index === selectedBotIndex }">
+              <img :src="bot.avatar" class="w-6 h-6 rounded-full mr-2 object-cover" alt="" />
+              <span class="text-gray-900 dark:text-gray-100">{{ bot.name }}</span>
+            </div>
+          </div>
         </div>
 
         <div class="relative">

@@ -1,6 +1,9 @@
 <script setup lang="ts">
+import type { Bot } from "@/pages/Chat.vue";
 import { useSession } from "@clerk/vue"
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
+import DOMPurify from 'isomorphic-dompurify';
+import { marked } from 'marked';
 import { computed } from 'vue';
 import type { AuthUser } from '../services/auth';
 
@@ -18,6 +21,7 @@ const props = defineProps<{
   index: number;
   currentUser: AuthUser;
   messages: ChatPayloadUser[];
+  availableBots: Bot[]
 }>();
 
 const { session, isLoaded } = useSession();
@@ -169,6 +173,24 @@ const formatTime = (timestamp: number) => {
   });
 };
 
+// Configure marked options for safe rendering
+const renderer = new marked.Renderer();
+marked.setOptions({
+  renderer: renderer,
+  gfm: true, // GitHub Flavored Markdown
+  breaks: true // Convert line breaks to <br>
+});
+
+// Safely render markdown content
+const renderMarkdown = computed(() => {
+  if (!props.message.message) return '';
+  // First sanitize the input
+  const sanitizedInput = DOMPurify.sanitize(props.message.message);
+  // Then render markdown and sanitize the output again
+  const htmlContent = marked.parse(sanitizedInput, { async: false }) as string;
+  return DOMPurify.sanitize(htmlContent);
+});
+
 </script>
 <template>
   <!-- Message -->
@@ -227,7 +249,8 @@ const formatTime = (timestamp: number) => {
         year: new Date(message.timestamp).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
       })">
         <!-- Message text -->
-        <div v-if="message.message" class="text break-words">{{ message.message }}</div>
+        <div v-if="message.message" class="text break-words prose dark:prose-invert max-w-none prose-sm"
+          v-html="renderMarkdown"></div>
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">

@@ -4,27 +4,14 @@ import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
 import EmojiPicker from 'vue3-emoji-picker'
 import 'vue3-emoji-picker/css'
+import pearlAvatar from "@/assets/pearl.webp";
 import Message, { type ChatPayloadUser } from "@/components/Message.vue";
 import Sidebar from "@/components/Sidebar.vue"
 import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
 import type { ChatPayload, MessagePayload } from "@hugin-bot/functions/src/types";
 import {
-	Bot as BotIcon,
-	File as FileIcon,
-	Image as ImageIcon,
-	LogOut as LogOutIcon,
 	Menu as MenuIcon,
-	Mic as MicIcon,
-	Moon as MoonIcon,
-	MoreHorizontal as MoreHorizontalIcon,
-	Plus as PlusIcon,
-	Reply as ReplyIcon,
-	Send as SendIcon,
-	Smile as SmileIcon,
-	StopCircle as StopCircleIcon,
-	Sun as SunIcon,
 	Users as UsersIcon,
-	Video as VideoIcon,
 	X as XIcon,
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
@@ -32,12 +19,6 @@ import MessageInput from "../components/MessageInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { useTheme } from '../composables/useTheme';
 import type { AuthUser } from "../services/auth";
-import ChatList from "./ChatList.vue";
-import FilePreview from "./FilePreview.vue";
-import GifPicker from './GifPicker.vue'
-import ModelList from "./ModelList.vue";
-import RecordAudio from "./RecordAudio.vue";
-import UserList from "./UserList.vue";
 
 export type User = AuthUser & {
 	online?: boolean;
@@ -58,6 +39,18 @@ export type Attachment = {
 	size: string;
 	type: string;
 };
+
+export interface Bot {
+	id: string;
+	name: string;
+	avatar?: string;
+};
+
+const availableBots: Bot[] = [{
+	id: 'gemini',
+	name: 'Gima',
+	avatar: pearlAvatar
+}];
 
 type RoomMembers = RouterOutput["roomMembers"];
 
@@ -224,13 +217,24 @@ const fetchMessages = async (roomId: string) => {
 
 		// Transform messages to match ChatPayload type
 		chatMessages.value = messages.map(msg => {
-			const user = roomMembers.value[msg.userId];
+			let user = roomMembers.value[msg.userId];
+
+			if (msg.type === "llm") {
+				const [bot] = availableBots.filter(bot => bot.id === msg.userId);
+				user = {
+					id: bot.id,
+					name: bot.name,
+					avatar: bot.avatar,
+					type: "llm"
+				}
+			}
 
 			return {
 				action: "sendMessage",
 				senderId: msg.userId,
 				roomId: currentChatId.value,
 				timestamp: new Date(msg.createdAt).getTime(),
+				type: msg.type as "llm" | "user" | "event",
 				...(msg.message ? { message: msg.message } : {
 					imageFiles: msg.imageFiles || [],
 					videoFiles: msg.videoFiles || [],
@@ -295,39 +299,39 @@ const removeFile = (type: 'image' | 'video' | 'audio') => {
 };
 
 // Modify sendMessage to use WebSocket
-const sendMessage = () => {
-	if ((!messageInput.value.trim() && !selectedFile.value && !selectedVideoFile.value && !selectedAudioFile.value && !audioRecording.value) || !currentUser.value) return;
+// const sendMessage = () => {
+// 	if ((!messageInput.value.trim() && !selectedFile.value && !selectedVideoFile.value && !selectedAudioFile.value && !audioRecording.value) || !currentUser.value) return;
 
-	// Convert files to URLs (this should be handled by your file upload service)
-	const imageFiles = selectedFile.value ? [URL.createObjectURL(selectedFile.value)] : [];
-	const videoFiles = selectedVideoFile.value ? [URL.createObjectURL(selectedVideoFile.value)] : [];
-	const audioFiles = selectedAudioFile.value ? [URL.createObjectURL(selectedAudioFile.value)] :
-		audioRecording.value ? [audioRecording.value] : [];
+// 	// Convert files to URLs (this should be handled by your file upload service)
+// 	const imageFiles = selectedFile.value ? [URL.createObjectURL(selectedFile.value)] : [];
+// 	const videoFiles = selectedVideoFile.value ? [URL.createObjectURL(selectedVideoFile.value)] : [];
+// 	const audioFiles = selectedAudioFile.value ? [URL.createObjectURL(selectedAudioFile.value)] :
+// 		audioRecording.value ? [audioRecording.value] : [];
 
-	// Create message based on whether we have media files or text
-	const message: ChatPayload = {
-		action: "sendMessage",
-		senderId: currentUser.value.id,
-		roomId: currentChatId.value,
-		timestamp: Date.now(),
-		...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
-			? {
-				imageFiles,
-				videoFiles,
-				audioFiles,
-			}
-			: {
-				message: messageInput.value,
-			}),
-	};
+// 	// Create message based on whether we have media files or text
+// 	const message: ChatPayload = {
+// 		action: "sendMessage",
+// 		senderId: currentUser.value.id,
+// 		roomId: currentChatId.value,
+// 		timestamp: Date.now(),
+// 		...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
+// 			? {
+// 				imageFiles,
+// 				videoFiles,
+// 				audioFiles,
+// 			}
+// 			: {
+// 				message: messageInput.value,
+// 			}),
+// 	};
 
-	sendSocketMsg(message);
-	messageInput.value = '';
-	selectedFile.value = null;
-	selectedVideoFile.value = null;
-	selectedAudioFile.value = null;
-	audioRecording.value = null;
-};
+// 	sendSocketMsg(message);
+// 	messageInput.value = '';
+// 	selectedFile.value = null;
+// 	selectedVideoFile.value = null;
+// 	selectedAudioFile.value = null;
+// 	audioRecording.value = null;
+// };
 
 // Update the watch for chatMessages
 watch(chatMessages, (newMessages, oldMessages) => {
@@ -349,7 +353,19 @@ watch(currentChatId, (newRoomId) => {
 const handleWebSocketMessage = (event: MessageEvent) => {
 	const data = JSON.parse(event.data) as ChatPayload;
 	if (data.action === 'sendMessage') {
-		const user = roomMembers.value[data.senderId];
+		let user = roomMembers.value[data.senderId];
+
+		if (data.type === "llm") {
+			const [bot] = availableBots.filter(bot => bot.id === data.senderId);
+
+			user = {
+				id: bot.id,
+				name: bot.name,
+				avatar: bot.avatar,
+				type: "llm",
+			};
+		}
+
 		const message: ChatPayloadUser = {
 			...data,
 			user: user ? {
@@ -669,23 +685,23 @@ const insertEmoji = (emoji: EmojiData) => {
 };
 
 // Update the insertGif function
-const selectAndSendGif = (url: string) => {
-	// How do I centralize checking or making sure session.user exists
-	if (!session.value?.user) {
-		return;
-	}
+// const selectAndSendGif = (url: string) => {
+// 	// How do I centralize checking or making sure session.user exists
+// 	if (!session.value?.user) {
+// 		return;
+// 	}
 
-	const message: MessagePayload = {
-		action: 'sendMessage',
-		senderId: session.value?.user.id,
-		roomId: currentChatId.value,
-		timestamp: Date.now(),
-		imageFiles: [url]
-	};
+// 	const message: MessagePayload = {
+// 		action: 'sendMessage',
+// 		senderId: session.value?.user.id,
+// 		roomId: currentChatId.value,
+// 		timestamp: Date.now(),
+// 		imageFiles: [url]
+// 	};
 
-	showGifPicker.value = false;
-	sendSocketMsg(message);
-};
+// 	showGifPicker.value = false;
+// 	sendSocketMsg(message);
+// };
 
 // Update the handleAudioStop function
 const handleAudioStop = (audioUrl: string) => {
@@ -776,13 +792,13 @@ const handleCreateNewAiChat = async () => {
 			<div ref="messagesContainer" class="flex-1 overflow-y-auto px-2 sm:px-4 py-4">
 				<template v-for="(message, index) in chatMessages" :key="message.senderId + message.timestamp">
 					<Message v-if="currentUser" :message="message" :index="index" :messages="chatMessages"
-						:currentUser="currentUser" />
+						:currentUser="currentUser" :availableBots="availableBots" />
 				</template>
 			</div>
 
 			<!-- Input area -->
-			<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :isDarkMode="isDarkMode"
-				@sendMessage="sendSocketMsg" />
+			<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :availableBots="availableBots"
+				:isDarkMode="isDarkMode" @sendMessage="sendSocketMsg" />
 		</div>
 	</div>
 </template>
