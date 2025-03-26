@@ -51,7 +51,7 @@ export const RoomEntity = new Entity(
 				readOnly: true,
 			},
 			type: {
-				type: ["group", "dm"],
+				type: ["group", "dm", "llm"],
 			},
 			updatedAt: {
 				type: "number",

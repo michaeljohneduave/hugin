@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomMessagesService } from "@hugin-bot/core/src/entities/room-messages.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
@@ -75,6 +76,29 @@ export const appRouter = router({
 
 			return rooms.data;
 		}),
+	createAiRoom: publicProcedure
+		.input(
+			z.object({
+				userId: z.string(),
+				name: z.string(),
+				type: z.enum(["group", "dm", "llm"]),
+			}),
+		)
+		.mutation(async ({ input }) => {
+			const room = await RoomEntity.create({
+				roomId: crypto.randomUUID(),
+				userId: input.userId,
+				name: input.name,
+				type: input.type,
+				user: {
+					firstName: "AI",
+					lastName: "Assistant",
+					avatar: "/ai-avatar.png",
+				},
+			}).go();
+
+			return room.data;
+		}),
 	roomsWithLastMessage: publicProcedure
 		.input(
 			z.object({
@@ -118,7 +142,7 @@ export const appRouter = router({
 				id: room.userId,
 				name: `${room.user.firstName} ${room.user.lastName}`,
 				avatar: room.user.avatar,
-				type: "human" as const,
+				type: "human",
 			}));
 		}),
 	messages: publicProcedure

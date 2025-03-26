@@ -61,6 +61,7 @@ export const MessageEntity = new Entity(
 			// could be people leaving and joining
 			type: {
 				type: ["llm", "user", "event"],
+				required: true,
 			},
 			createdAt: {
 				type: "number",

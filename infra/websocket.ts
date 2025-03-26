@@ -1,7 +1,12 @@
-import { MessageTable, Valkey } from "./database";
+import { MessageTable, Postgres, Valkey } from "./database";
 import { domain } from "./dns";
 import { vpc } from "./network";
-import { CLERK_SECRET_KEY } from "./secrets";
+import { task } from "./puppeteer";
+import {
+	CLERK_SECRET_KEY,
+	GOOGLE_GENERATIVE_AI_API_KEY,
+	POSTGRES_CONN_URI,
+} from "./secrets";
 
 export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
 	domain:
@@ -15,7 +20,16 @@ export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
 
 websocketApi.route("$connect", {
 	vpc,
-	link: [websocketApi, Valkey, MessageTable, CLERK_SECRET_KEY],
+	link: [
+		task,
+		Postgres,
+		POSTGRES_CONN_URI,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		websocketApi,
+		Valkey,
+		MessageTable,
+		CLERK_SECRET_KEY,
+	],
 	handler: "packages/functions/src/websocket.connect",
 	transform: {
 		function: {
@@ -26,7 +40,16 @@ websocketApi.route("$connect", {
 
 websocketApi.route("$disconnect", {
 	vpc,
-	link: [websocketApi, Valkey, MessageTable, CLERK_SECRET_KEY],
+	link: [
+		task,
+		Postgres,
+		POSTGRES_CONN_URI,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		websocketApi,
+		Valkey,
+		MessageTable,
+		CLERK_SECRET_KEY,
+	],
 	handler: "packages/functions/src/websocket.disconnect",
 	transform: {
 		function: {
@@ -37,7 +60,16 @@ websocketApi.route("$disconnect", {
 
 websocketApi.route("$default", {
 	vpc,
-	link: [websocketApi, Valkey, MessageTable, CLERK_SECRET_KEY],
+	link: [
+		task,
+		Postgres,
+		POSTGRES_CONN_URI,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		websocketApi,
+		Valkey,
+		MessageTable,
+		CLERK_SECRET_KEY,
+	],
 	handler: "packages/functions/src/websocket.$default",
 	transform: {
 		function: {

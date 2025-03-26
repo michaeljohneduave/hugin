@@ -43,6 +43,7 @@ type MediaFiles = {
 export type ChatPayload = ChatPayloadBase & {
 	action: "sendMessage";
 	roomId: string;
+	type: "llm" | "user" | "event";
 } & XOR<
 		{
 			message: string;

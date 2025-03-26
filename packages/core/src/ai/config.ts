@@ -1,4 +1,9 @@
-import { google } from "@ai-sdk/google";
+import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { Resource } from "sst";
+
+const google = createGoogleGenerativeAI({
+	apiKey: Resource.GOOGLE_GENERATIVE_AI_API_KEY.value,
+});
 
 export const bigModel = google("gemini-2.0-flash-001");
 export const brightModel = google("gemini-2.0-flash-thinking-exp-01-21");

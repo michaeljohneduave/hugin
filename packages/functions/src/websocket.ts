@@ -4,6 +4,7 @@ import {
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { verifyToken as clerkVerifyToken } from "@clerk/backend";
 import { decodeJwt } from "@clerk/backend/jwt";
+import { router } from "@hugin-bot/core/src/ai/router";
 import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
 import type { APIGatewayProxyEvent } from "aws-lambda";
@@ -145,7 +146,7 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 		}
 
 		const payload: MessagePayload = JSON.parse(event.body!);
-		// console.log("Receive message", payload);
+		console.log("Receive message", payload);
 
 		switch (payload.action) {
 			case "ping": {
@@ -256,6 +257,77 @@ export const pong = (conn: string) => {
 	);
 };
 
+async function multiSendMsg(message: ChatPayload, connectionIds: string[]) {
+	await Promise.allSettled(
+		connectionIds.map((conn) =>
+			apiClient
+				.send(
+					new PostToConnectionCommand({
+						Data: JSON.stringify(message),
+						ConnectionId: conn,
+					}),
+				)
+				.catch(async (error: Error) => {
+					// Clean up connectionIds not deleted on disconnect
+					if (error.name === "GoneException") {
+						const connectionData = await redis.get(`connection:${conn}`);
+						const [userId] = connectionData?.split("--") || [];
+
+						if (userId) {
+							await Promise.allSettled([
+								redis.del([`connection:${conn}`]),
+								redis.srem(`user:${userId}`, [conn]),
+							]);
+						}
+
+						return;
+					}
+					throw error;
+				}),
+		),
+	);
+}
+
+async function getLLMResponse({
+	roomId,
+	message,
+	connectionIds,
+}: {
+	roomId: string;
+	message: string;
+	connectionIds: string[];
+}) {
+	const { text } = await router([
+		{
+			role: "user",
+			content: message,
+		},
+	]);
+
+	const senderId = "gemini";
+
+	const chatPayload: ChatPayload = {
+		action: "sendMessage",
+		senderId,
+		roomId,
+		timestamp: Date.now(),
+		mentions: [senderId],
+		message: text,
+		type: "llm",
+	};
+
+	MessageEntity.create({
+		userId: senderId,
+		message: text,
+		roomId: roomId,
+		type: "llm",
+	})
+		.go()
+		.catch(console.error);
+
+	await multiSendMsg(chatPayload, connectionIds);
+}
+
 // TODO: Need to separate the endpoint for DMs and rooms
 export const sendMessage = async (
 	payload: ChatPayload,
@@ -286,6 +358,7 @@ export const sendMessage = async (
 		audioFiles: payload.audioFiles,
 		videoFiles: payload.videoFiles,
 		roomId: payload.roomId,
+		type: "user",
 	})
 		.go()
 		.catch(console.error);
@@ -305,8 +378,9 @@ export const sendMessage = async (
 		senderId: jwtPayload.payload.sub,
 		roomId: payload.roomId,
 		timestamp: Date.now(),
+		type: "user",
 		...(payload.message
-			? { message: payload.message }
+			? { message: payload.message, mentions: payload.mentions }
 			: {
 					imageFiles: payload.imageFiles || [],
 					videoFiles: payload.videoFiles || [],
@@ -314,36 +388,16 @@ export const sendMessage = async (
 				}),
 	};
 
-	await Promise.allSettled(
-		connectionIds.map((conn) =>
-			apiClient
-				.send(
-					new PostToConnectionCommand({
-						Data: JSON.stringify(message),
-						ConnectionId: conn,
-					}),
-				)
-				.catch(async (error: Error) => {
-					// Clean up connectionIds not deleted on disconnect
-					if (error.name === "GoneException") {
-						const connectionData = await redis.get(`connection:${conn}`);
-						const [userId] = connectionData?.split("--") || [];
+	await multiSendMsg(message, connectionIds);
 
-						if (userId) {
-							await Promise.allSettled([
-								redis.del([`connection:${conn}`]),
-								redis.srem(`user:${userId}`, [conn]),
-							]);
-						}
-
-						return;
-					}
-					throw error;
-				}),
-		),
-	);
-
-	await pipeline.exec();
+	// if llm tag is detected send the message to the router function
+	if (payload.mentions && message.message) {
+		await getLLMResponse({
+			roomId: payload.roomId,
+			message: payload.message,
+			connectionIds,
+		});
+	}
 };
 
 // Handles cleaning up the connectionId (if possible)
