@@ -741,25 +741,25 @@ const handleCreateNewAiChat = async () => {
 		<div class="fixed inset-0 z-40 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out"
 			:class="[isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full']">
 			<!-- Sidebar backdrop -->
-			<div class="absolute inset-0 bg-gray-900/50 md:hidden" @click="isMobileMenuOpen = false"></div>
+			<!-- <div class="absolute inset-0 bg-gray-900/50 md:hidden" @click="isMobileMenuOpen = false"></div> -->
 
 			<!-- Sidebar content -->
-			<Sidebar :currentChatId="currentChatId" :rooms="formattedRooms" :isMobileMenuOpen="isMobileMenuOpen"
+			<!-- <Sidebar :currentChatId="currentChatId" :rooms="formattedRooms" :isMobileMenuOpen="isMobileMenuOpen"
 				:isOnline="isOnline" @selectChat="handleChatSelect" @createNewAiChat="handleCreateNewAiChat"
-				@toggleMobileMenu="isMobileMenuOpen = !isMobileMenuOpen" />
+				@toggleMobileMenu="isMobileMenuOpen = !isMobileMenuOpen" /> -->
 		</div>
 
 		<!-- Main content -->
 		<div class="flex-1 flex flex-col">
 			<!-- Chat header -->
 			<div class="h-16 flex items-center justify-between px-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
-				<div class="flex items-center">
+				<!-- <div class="flex items-center">
 					<button class="md:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
 						@click="isMobileMenuOpen = !isMobileMenuOpen">
 						<MenuIcon v-if="!isMobileMenuOpen" class="h-6 w-6" />
 						<XIcon v-else class="h-6 w-6" />
 					</button>
-				</div>
+				</div> -->
 
 				<div class="flex-1 flex flex-col items-center">
 					<h2 class="text-lg font-medium">{{ currentChatId }}</h2>

@@ -5,16 +5,11 @@ import {
   LogOut as LogOutIcon,
   Moon as MoonIcon,
   MoreHorizontal as MoreHorizontalIcon,
-  Plus as PlusIcon,
   Sun as SunIcon,
-  Users as UsersIcon,
 } from "lucide-vue-next";
 import { computed, ref } from 'vue';
 import { useAuth } from '../composables/useAuth';
 import { useTheme } from '../composables/useTheme';
-import { useWebsocket } from '../composables/useWebsocket';
-import type { Chat } from "./ChatList.vue";
-import ChatList from "./ChatList.vue";
 
 const { isDarkMode, toggleTheme } = useTheme();
 const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();

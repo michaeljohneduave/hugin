@@ -78,13 +78,13 @@ function formatRelativeTime(timestamp: number): string {
       </div>
       <div class="flex-1 min-w-0">
         <div class="flex items-center justify-between">
-          <p class="text-sm font-medium truncate">{{ getChatName(chat) }}</p>
+          <!-- <p class="text-sm font-medium truncate">{{ getChatName(chat) }}</p> -->
           <p v-if="chat.lastMessage" class="text-xs text-gray-500 dark:text-gray-400">
             {{ formatRelativeTime(chat.lastMessage.createdAt) }}
           </p>
         </div>
         <p class="text-sm text-gray-500 dark:text-gray-400 truncate">
-          {{ getLastMessagePreview(chat) }}
+          <!-- {{ getLastMessagePreview(chat) }} -->
         </p>
       </div>
     </li>
