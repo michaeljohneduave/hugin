@@ -3,20 +3,11 @@ import type { Bot } from "@/pages/Chat.vue";
 import { useSession } from "@clerk/vue"
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import DOMPurify from 'isomorphic-dompurify';
-import { marked } from 'marked';
-import Prism from 'prismjs';
+import Prism from "prismjs"
 import { computed, onMounted } from 'vue';
 import type { AuthUser } from '../services/auth';
-import 'prismjs/themes/prism.css';
-import 'prismjs/components/prism-typescript';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-jsx';
-import 'prismjs/components/prism-tsx';
-import 'prismjs/components/prism-bash';
-import 'prismjs/components/prism-json';
-import 'prismjs/components/prism-css';
-import 'prismjs/components/prism-markdown';
-import { Check, Copy } from 'lucide-vue-next';
+
+import '@/lib/prism';
 
 export type ChatPayloadUser = ChatPayload & {
   user?: {
@@ -184,16 +175,59 @@ const formatTime = (timestamp: number) => {
   });
 };
 
-// Configure marked options for safe rendering
-const renderer = new marked.Renderer();
+type MessagePart = {
+  type: 'text' | 'code';
+  content: string;
+  language?: string;
+};
 
-// Custom code block renderer
-renderer.code = (code: { text: string; lang?: string }) => {
-  const validLanguage = code.lang && Prism.languages[code.lang] ? code.lang : 'plaintext';
+// Function to parse code blocks in text
+const parseCodeBlocks = (text: string): MessagePart[] => {
+  // Regex to match code blocks with optional language
+  const codeBlockRegex = /```(\w+)?\n([\s\S]*?)```/g;
+  let lastIndex = 0;
+  const parts: MessagePart[] = [];
+
+  // Find all code blocks
+  for (const match of text.matchAll(codeBlockRegex)) {
+    // Add text before code block
+    if (match.index && match.index > lastIndex) {
+      parts.push({
+        type: 'text',
+        content: text.slice(lastIndex, match.index)
+      });
+    }
+
+    // Add code block
+    const language = match[1] || 'plaintext';
+    const code = match[2].trim();
+    parts.push({
+      type: 'code',
+      language,
+      content: code
+    });
+
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text
+  if (lastIndex < text.length) {
+    parts.push({
+      type: 'text',
+      content: text.slice(lastIndex)
+    });
+  }
+
+  return parts;
+};
+
+// Function to create code block HTML
+const createCodeBlockHtml = (code: string, language: string) => {
+  const validLanguage = language && Prism.languages[language] ? language : 'plaintext';
   const highlightedCode = Prism.highlight(
-    code.text,
+    code,
     Prism.languages[validLanguage],
-    validLanguage
+    validLanguage,
   );
 
   return `<pre class="code-block" data-language="${validLanguage}">
@@ -204,24 +238,38 @@ renderer.code = (code: { text: string; lang?: string }) => {
         <span class="check-icon"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></span>
       </button>
     </div>
-    <code class="language-${validLanguage}">${highlightedCode}</code>
+    <code class="language-${language}">${highlightedCode}</code>
   </pre>`;
 };
 
-marked.setOptions({
-  renderer: renderer,
-  gfm: true, // GitHub Flavored Markdown
-  breaks: true // Convert line breaks to <br>
-});
+// Function to escape HTML in text
+const escapeHtml = (text: string) => {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+};
 
-// Safely render markdown content
-const renderMarkdown = computed(() => {
+// Render message content
+const renderContent = computed(() => {
   if (!props.message.message) return '';
+
   // First sanitize the input
   const sanitizedInput = DOMPurify.sanitize(props.message.message);
-  // Then render markdown and sanitize the output again
-  const htmlContent = marked.parse(sanitizedInput, { async: false }) as string;
-  return DOMPurify.sanitize(htmlContent);
+
+  // Parse the content into parts (text and code blocks)
+  const parts = parseCodeBlocks(sanitizedInput);
+
+  // Convert parts to HTML
+  const html = parts.map(part => {
+    if (part.type === 'code' && part.language) {
+      return createCodeBlockHtml(part.content, part.language);
+    }
+    // Convert newlines to <br> and escape HTML in text
+    return escapeHtml(part.content).replace(/\n/g, '<br>');
+  }).join('');
+
+  // Final sanitization of the generated HTML
+  return DOMPurify.sanitize(html);
 });
 
 // Add copy functionality
@@ -309,7 +357,7 @@ onMounted(() => {
       })">
         <!-- Message text -->
         <div v-if="message.message" class="text break-words prose dark:prose-invert max-w-none prose-sm"
-          v-html="renderMarkdown"></div>
+          v-html="renderContent"></div>
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">
@@ -359,7 +407,7 @@ onMounted(() => {
   margin: 0.5rem 0;
   padding: 1rem;
   border-radius: 0.5rem;
-  background-color: #1e1e1e;
+  background-color: var(--prism-background, #1e1e1e);
   overflow-x: auto;
   font-family: 'Fira Code', monospace;
   font-size: 0.875rem;
@@ -372,7 +420,7 @@ onMounted(() => {
 }
 
 :deep(.code-block code) {
-  color: #d4d4d4;
+  color: var(--prism-foreground, #d4d4d4);
   background: none;
   padding: 0;
   font-family: inherit;
