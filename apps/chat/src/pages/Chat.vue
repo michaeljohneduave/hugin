@@ -1,38 +1,28 @@
 <script setup lang="ts">
+import loebotteAvatar from "@/assets/loebotte.webp";
+import pearlAvatar from "@/assets/pearl.webp";
+import Message from "@/components/Message.vue";
+import RoomEvent from '@/components/RoomEvent.vue';
+import Sidebar from "@/components/Sidebar.vue"
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
-import EmojiPicker from 'vue3-emoji-picker'
-import 'vue3-emoji-picker/css'
-import pearlAvatar from "@/assets/pearl.webp";
-import Message, { type ChatPayloadUser } from "@/components/Message.vue";
-import Sidebar from "@/components/Sidebar.vue"
 import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
-import type { ChatPayload, MessagePayload } from "@hugin-bot/functions/src/types";
+import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/types";
 import {
-	Menu as MenuIcon,
 	Users as UsersIcon,
-	X as XIcon,
 } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import MessageInput from "../components/MessageInput.vue";
 import { useAuth } from "../composables/useAuth";
 import { useTheme } from '../composables/useTheme';
-import type { AuthUser } from "../services/auth";
+import type { User } from "../services/auth";
 
-export type User = AuthUser & {
-	online?: boolean;
-};
 
-type Reply = {
-	sender: User;
-};
-
-export type LLM = {
-	id: string;
-	name: string;
-	type: string;
-};
+// Both for regular user and bot
+export type ChatPayloadWithUser = ChatPayload & {
+	user: User
+}
 
 export type Attachment = {
 	name: string;
@@ -46,18 +36,24 @@ export interface Bot {
 	avatar?: string;
 };
 
-const availableBots: Bot[] = [{
+const availableBots: User[] = [{
 	id: 'gemini',
 	name: 'Gima',
-	avatar: pearlAvatar
+	avatar: pearlAvatar,
+	type: "llm"
 }];
 
-type RoomMembers = RouterOutput["roomMembers"];
-
+const unknownBot: User = {
+	id: "lobot",
+	name: "Loebotte",
+	avatar: loebotteAvatar,
+	type: "llm"
+}
 
 // State
 const messageInput = ref("");
-const chatMessages = ref<ChatPayloadUser[]>([]);
+const chatMessages = ref<Array<ChatPayloadWithUser>>([]);
+const roomEvents = ref<Array<RoomPayload>>([]);
 const showAttachmentMenu = ref(false);
 const selectedFile = ref<File | null>(null);
 const selectedVideoFile = ref<File | null>(null);
@@ -68,7 +64,6 @@ const recordingTime = ref(0);
 const recordingInterval = ref<NodeJS.Timeout | null>(null);
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
-const replyingTo = ref<Reply | null>(null);
 const showMentionSuggestions = ref(false);
 const rooms = ref<RouterOutput["roomsWithLastMessage"]>([]);
 const roomMembers = ref<Record<string, RouterOutput["roomMembers"][number]>>({});
@@ -89,12 +84,15 @@ const formattedRooms = computed(() => {
 		},
 		lastMessage: room.lastMessage ? {
 			messageId: room.lastMessage.messageId,
+			action: "message" as const,
+			roomId: room.roomId,
+			type: "user" as const,
 			userId: room.lastMessage.userId,
+			createdAt: room.lastMessage.createdAt,
 			message: room.lastMessage.message,
 			imageFiles: room.lastMessage.imageFiles || [],
 			videoFiles: room.lastMessage.videoFiles || [],
 			audioFiles: room.lastMessage.audioFiles || [],
-			createdAt: room.lastMessage.createdAt
 		} : undefined
 	}));
 });
@@ -107,25 +105,6 @@ const trpc = useTrpc();
 
 // Replace the isDarkMode ref with the composable
 const { isDarkMode, toggleTheme } = useTheme();
-
-// Available LLMs
-const availableLLMs = ref<User[]>([
-	{
-		id: "gpt4o",
-		name: "GPT-4o",
-		type: "human",
-	},
-	{
-		id: "claude3",
-		name: "Claude 3",
-		type: "human",
-	},
-	{
-		id: "gemini",
-		name: "Gemini",
-		type: "human",
-	},
-]);
 
 // Add currentChatId ref
 const currentChatId = ref("general");
@@ -206,48 +185,61 @@ const handleScroll = () => {
 	isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 100;
 };
 
-
-
 // Function to fetch messages for a room
 const fetchMessages = async (roomId: string) => {
 	try {
 		const messages = await trpc.messagesByRoom.query({
 			roomId,
 		});
-
 		// Transform messages to match ChatPayload type
 		chatMessages.value = messages.map(msg => {
-			let user = roomMembers.value[msg.userId];
+			if (msg.type === "event") {
+				return null;
+			}
 
 			if (msg.type === "llm") {
-				const [bot] = availableBots.filter(bot => bot.id === msg.userId);
-				user = {
-					id: bot.id,
-					name: bot.name,
-					avatar: bot.avatar,
-					type: "llm"
+				return {
+					messageId: msg.messageId,
+					action: "message" as const,
+					senderId: msg.userId,
+					roomId: currentChatId.value,
+					timestamp: new Date(msg.createdAt).getTime(),
+					type: "llm" as const,
+					...(msg.message ? { message: msg.message } : {
+						imageFiles: msg.imageFiles || [],
+						videoFiles: msg.videoFiles || [],
+						audioFiles: msg.audioFiles || []
+					}),
+					user: availableBots.find(bot => bot.id === msg.userId) || unknownBot,
 				}
 			}
 
+			const user = roomMembers.value[msg.userId];
+
 			return {
-				action: "sendMessage",
+				messageId: msg.messageId,
+				action: "message" as const,
 				senderId: msg.userId,
 				roomId: currentChatId.value,
 				timestamp: new Date(msg.createdAt).getTime(),
-				type: msg.type as "llm" | "user" | "event",
+				type: "user" as const,
 				...(msg.message ? { message: msg.message } : {
 					imageFiles: msg.imageFiles || [],
 					videoFiles: msg.videoFiles || [],
 					audioFiles: msg.audioFiles || []
 				}),
-				user: user ? {
-					id: user.id,
-					name: user.name,
-					avatar: user.avatar || '/placeholder.svg?height=80&width=80',
-					type: user.type
-				} : undefined
-			};
-		});
+				user: user,
+			}
+		}).filter(msg => msg !== null);
+
+		roomEvents.value = messages.filter(msg => msg.type === "event").map(msg => ({
+			action: msg.action as "joinRoom" | "leaveRoom",
+			senderId: msg.userId,
+			messageId: msg.messageId,
+			roomId: currentChatId.value,
+			timestamp: new Date(msg.createdAt).getTime(),
+			type: "event",
+		}));
 
 		// Wait for Vue to update the DOM before scrolling
 		await nextTick();
@@ -298,41 +290,6 @@ const removeFile = (type: 'image' | 'video' | 'audio') => {
 	}
 };
 
-// Modify sendMessage to use WebSocket
-// const sendMessage = () => {
-// 	if ((!messageInput.value.trim() && !selectedFile.value && !selectedVideoFile.value && !selectedAudioFile.value && !audioRecording.value) || !currentUser.value) return;
-
-// 	// Convert files to URLs (this should be handled by your file upload service)
-// 	const imageFiles = selectedFile.value ? [URL.createObjectURL(selectedFile.value)] : [];
-// 	const videoFiles = selectedVideoFile.value ? [URL.createObjectURL(selectedVideoFile.value)] : [];
-// 	const audioFiles = selectedAudioFile.value ? [URL.createObjectURL(selectedAudioFile.value)] :
-// 		audioRecording.value ? [audioRecording.value] : [];
-
-// 	// Create message based on whether we have media files or text
-// 	const message: ChatPayload = {
-// 		action: "sendMessage",
-// 		senderId: currentUser.value.id,
-// 		roomId: currentChatId.value,
-// 		timestamp: Date.now(),
-// 		...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
-// 			? {
-// 				imageFiles,
-// 				videoFiles,
-// 				audioFiles,
-// 			}
-// 			: {
-// 				message: messageInput.value,
-// 			}),
-// 	};
-
-// 	sendSocketMsg(message);
-// 	messageInput.value = '';
-// 	selectedFile.value = null;
-// 	selectedVideoFile.value = null;
-// 	selectedAudioFile.value = null;
-// 	audioRecording.value = null;
-// };
-
 // Update the watch for chatMessages
 watch(chatMessages, (newMessages, oldMessages) => {
 	// Only scroll if new messages were added
@@ -351,33 +308,29 @@ watch(currentChatId, (newRoomId) => {
 
 // Watch for WebSocket messages to update room members
 const handleWebSocketMessage = (event: MessageEvent) => {
-	const data = JSON.parse(event.data) as ChatPayload;
-	if (data.action === 'sendMessage') {
-		let user = roomMembers.value[data.senderId];
+	const data = JSON.parse(event.data) as ChatPayload | RoomPayload;
+	console.log("data", data);
+	if (data.action === 'message') {
 
-		if (data.type === "llm") {
-			const [bot] = availableBots.filter(bot => bot.id === data.senderId);
+		switch (data.type) {
+			case "llm":
+				chatMessages.value.push({
+					...data,
+					user: availableBots.find(bot => bot.id === data.senderId) || unknownBot,
+				});
 
-			user = {
-				id: bot.id,
-				name: bot.name,
-				avatar: bot.avatar,
-				type: "llm",
-			};
+				break;
+			case "user":
+				chatMessages.value.push({
+					...data,
+					user: roomMembers.value[data.senderId],
+				})
+				break;
 		}
 
-		const message: ChatPayloadUser = {
-			...data,
-			user: user ? {
-				id: user.id,
-				name: user.name,
-				avatar: user.avatar || '/placeholder.svg?height=80&width=80',
-				type: user.type
-			} : undefined
-		};
-		chatMessages.value.push(message);
-
 		scrollToBottom();
+	} else if (data.action === "joinRoom" || data.action === "leaveRoom") {
+		roomEvents.value.push(data);
 	}
 };
 
@@ -539,20 +492,6 @@ watch(messageInput, (newValue) => {
 	}
 });
 
-// Filter mentions based on what's being typed after @
-const filteredMentions = computed(() => {
-	if (!showMentionSuggestions.value) return [];
-	const availableMentions = availableLLMs.value;
-
-	const lastAtIndex = messageInput.value.lastIndexOf("@");
-	if (lastAtIndex === -1) return availableMentions;
-
-	const query = messageInput.value.slice(lastAtIndex + 1).toLowerCase();
-	return availableMentions.filter((llm) =>
-		llm.name.toLowerCase().includes(query),
-	);
-});
-
 // Insert mention into message input
 const insertMention = (llm: User) => {
 	const lastAtIndex = messageInput.value.lastIndexOf("@");
@@ -566,28 +505,6 @@ const insertMention = (llm: User) => {
 	nextTick(() => {
 		textareaRef.value?.focus();
 	});
-};
-
-// Parse message for LLM mentions
-const parseMentions = (message: string) => {
-	const mentionRegex = /@([^\s]+)/g;
-	const mentions = [];
-	let match = mentionRegex.exec(message);
-
-	while (match !== null) {
-		const mentionName = match[1];
-		const llm = availableLLMs.value.find(
-			(l) => l.name.toLowerCase() === mentionName.toLowerCase(),
-		);
-
-		if (llm) {
-			mentions.push(llm);
-		}
-
-		match = mentionRegex.exec(message);
-	}
-
-	return mentions;
 };
 
 // Close dropdowns when clicking outside
@@ -743,6 +660,7 @@ const handleCreateNewAiChat = async () => {
 	}
 };
 
+
 </script>
 
 <template>
@@ -790,9 +708,10 @@ const handleCreateNewAiChat = async () => {
 
 			<!-- Messages container -->
 			<div ref="messagesContainer" class="flex-1 overflow-y-auto px-2 sm:px-4 py-4">
-				<template v-for="(message, index) in chatMessages" :key="message.senderId + message.timestamp">
+				<template v-for="(message, index) in chatMessages" :key="message.messageId">
 					<Message v-if="currentUser" :message="message" :index="index" :messages="chatMessages"
 						:currentUser="currentUser" :availableBots="availableBots" />
+					<RoomEvent v-else :event="message" :index="index" :messages="chatMessages" />
 				</template>
 			</div>
 

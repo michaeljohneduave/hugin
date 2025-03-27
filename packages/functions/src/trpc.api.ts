@@ -142,7 +142,7 @@ export const appRouter = router({
 				id: room.userId,
 				name: `${room.user.firstName} ${room.user.lastName}`,
 				avatar: room.user.avatar,
-				type: "human",
+				type: "user" as const,
 			}));
 		}),
 	messages: publicProcedure

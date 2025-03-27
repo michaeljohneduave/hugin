@@ -9,14 +9,13 @@ import {
   Plus as PlusIcon,
   Send as SendIcon,
   Smile as SmileIcon,
-  X as XIcon,
 } from "lucide-vue-next";
-import type { AuthUser } from "../services/auth";
+import type { User } from "../services/auth";
 import FilePreview from './FilePreview.vue';
 import GifPicker from './GifPicker.vue';
 
 const props = defineProps<{
-  currentUser: AuthUser | null;
+  currentUser: User | null;
   currentChatId: string;
   availableBots: Bot[];
   isDarkMode: boolean;
@@ -119,7 +118,8 @@ const selectAndSendGif = (url: string) => {
   if (!props.currentUser) return;
 
   const message: ChatPayload = {
-    action: 'sendMessage',
+    messageId: crypto.randomUUID(),
+    action: 'message',
     senderId: props.currentUser.id,
     roomId: props.currentChatId,
     timestamp: Date.now(),
@@ -209,7 +209,8 @@ const sendMessage = () => {
 
   // Create message based on whether we have media files or text
   const message: ChatPayload = {
-    action: "sendMessage",
+    messageId: crypto.randomUUID(),
+    action: "message",
     senderId: props.currentUser.id,
     roomId: props.currentChatId,
     timestamp: Date.now(),

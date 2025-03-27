@@ -1,35 +1,24 @@
 <script setup lang="ts">
-import type { Bot } from "@/pages/Chat.vue";
+import type { Bot, ChatPayloadEvent, ChatPayloadWithUser } from "@/pages/Chat.vue";
 import { useSession } from "@clerk/vue"
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import Prism from "prismjs"
 import { computed, onMounted } from 'vue';
-import type { AuthUser } from '../services/auth';
+import type { User } from '../services/auth';
 
 import '@/lib/prism';
 
-export type ChatPayloadUser = ChatPayload & {
-  user?: {
-    id: string;
-    name: string;
-    avatar: string;
-    type: string;
-  };
-};
-
 const props = defineProps<{
-  message: ChatPayloadUser;
+  message: ChatPayloadWithUser;
   index: number;
-  currentUser: AuthUser;
-  messages: ChatPayloadUser[];
+  currentUser: User;
+  messages: Array<ChatPayloadWithUser>;
   availableBots: Bot[]
 }>();
 
-const { session, isLoaded } = useSession();
-
 const isUser = computed(() => {
-  return props.currentUser.id === props.message.senderId;
+  return props.message.type === "user" && props.currentUser.id === props.message.senderId;
 });
 
 // Check if this is the first message in a group from the same sender

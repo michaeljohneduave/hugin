@@ -1,8 +1,8 @@
 import { ref } from "vue";
-import { type AuthUser, getAuthService } from "../services/auth";
+import { type User, getAuthService } from "../services/auth";
 
 export function useAuth() {
-	const user = ref<AuthUser | null>(null);
+	const user = ref<User | null>(null);
 	const isLoading = ref(true);
 	const error = ref<Error | null>(null);
 	const token = ref<string | null>(null);

@@ -1,4 +1,5 @@
 import type { Actions, JwtPayload } from "@clerk/types";
+import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
 
 // Let's go type gymnastics!!
 // Helper type to remove properties from T that are in U
@@ -22,16 +23,17 @@ export type ChatPayloadBase = {
 	senderId: UserId;
 	timestamp: number;
 };
-
 export type TokenPayload = ChatPayloadBase & {
 	action: "verifiedToken";
 	token: string;
 };
 
 export type RoomPayload = ChatPayloadBase & {
+	messageId: MessageEntityType["messageId"];
 	action: "joinRoom" | "leaveRoom";
 	roomId: string;
 	members?: UserId[];
+	type: "event";
 };
 
 type MediaFiles = {
@@ -40,10 +42,12 @@ type MediaFiles = {
 	audioFiles?: string[];
 };
 
+// Payload has reached the server and has a messageId attached to it
 export type ChatPayload = ChatPayloadBase & {
-	action: "sendMessage";
+	messageId: MessageEntityType["messageId"];
+	action: "message";
 	roomId: string;
-	type: "llm" | "user" | "event";
+	type: Exclude<MessageEntityType["type"], "event">;
 } & XOR<
 		{
 			message: string;

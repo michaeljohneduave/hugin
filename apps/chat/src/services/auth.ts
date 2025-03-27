@@ -1,16 +1,17 @@
 import type { Clerk, UserResource } from "@clerk/types";
+import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
 import { clerk } from "../lib/clerk";
 
-export interface AuthUser {
+export interface User {
 	id: string;
 	name: string;
 	avatar?: string;
 	email?: string;
-	type: "human";
+	type: Exclude<MessageEntityType["type"], "event">;
 }
 
 export interface AuthService {
-	getCurrentUser(): Promise<AuthUser | null>;
+	getCurrentUser(): Promise<User | null>;
 	signIn(): Promise<void>;
 	signOut(): Promise<void>;
 	isAuthenticated(): Promise<boolean>;
@@ -22,13 +23,13 @@ export interface AuthService {
 class ClerkAuthService implements AuthService {
 	private initialized = false;
 
-	private mapClerkUser(clerkUser: UserResource): AuthUser {
+	private mapClerkUser(clerkUser: UserResource): User {
 		return {
 			id: clerkUser.id,
 			name: `${clerkUser.firstName} ${clerkUser.lastName}`.trim(),
 			avatar: clerkUser.imageUrl,
 			email: clerkUser.emailAddresses[0]?.emailAddress,
-			type: "human",
+			type: "user",
 		};
 	}
 
@@ -44,7 +45,7 @@ class ClerkAuthService implements AuthService {
 		this.initialized = true;
 	}
 
-	async getCurrentUser(): Promise<AuthUser | null> {
+	async getCurrentUser(): Promise<User | null> {
 		await this.waitForInitialization();
 		const user = await clerk.user;
 		console.log("getCurrentUser - user:", user);

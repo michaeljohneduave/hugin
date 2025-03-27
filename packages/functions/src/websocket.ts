@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import {
 	ApiGatewayManagementApiClient,
 	PostToConnectionCommand,
@@ -231,7 +232,7 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 				]);
 				break;
 			}
-			case "sendMessage":
+			case "message":
 				await sendMessage(payload, connectionId);
 				break;
 		}
@@ -307,7 +308,8 @@ async function getLLMResponse({
 	const senderId = "gemini";
 
 	const chatPayload: ChatPayload = {
-		action: "sendMessage",
+		messageId: crypto.randomUUID(),
+		action: "message",
 		senderId,
 		roomId,
 		timestamp: Date.now(),
@@ -318,6 +320,7 @@ async function getLLMResponse({
 
 	MessageEntity.create({
 		userId: senderId,
+		action: "message",
 		message: text,
 		roomId: roomId,
 		type: "llm",
@@ -333,14 +336,15 @@ export const sendMessage = async (
 	payload: ChatPayload,
 	connectionId: string,
 ) => {
-	const [userId, token] =
-		(await redis.get(`connection:${connectionId}`))?.split("--") || [];
+	const value = await redis.get(`connection:${connectionId}`);
+	const [userId, token] = value?.split("--") || [];
 
 	if (!token) {
 		throw new Error("Jwt token not found");
 	}
 
-	console.log("decoding token", token);
+	// console.log("decoding value", value);
+	// console.log("decoding token", token);
 	const jwtPayload = decodeJwt(token);
 	const userIds = await redis.smembers(`room:${payload.roomId}:members`);
 	let pipeline = redis.pipeline();
@@ -350,8 +354,11 @@ export const sendMessage = async (
 	}
 
 	const results = await pipeline.exec();
+	const messageId = crypto.randomUUID();
 
 	MessageEntity.create({
+		messageId,
+		action: "message",
 		userId: payload.senderId,
 		message: payload.message,
 		imageFiles: payload.imageFiles,
@@ -374,7 +381,8 @@ export const sendMessage = async (
 		}) || [];
 
 	const message: ChatPayload = {
-		action: "sendMessage",
+		messageId,
+		action: "message",
 		senderId: jwtPayload.payload.sub,
 		roomId: payload.roomId,
 		timestamp: Date.now(),

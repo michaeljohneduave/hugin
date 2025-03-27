@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { BotIcon } from "lucide-vue-next";
-import type { AuthUser } from "../services/auth";
+import type { User } from "../services/auth";
 
 const props = defineProps<{
-  llms: AuthUser[];
+  llms: User[];
 }>();
 </script>
 

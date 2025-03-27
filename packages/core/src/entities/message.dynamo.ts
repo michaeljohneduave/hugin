@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { Entity } from "electrodb";
+import { Entity, type EntityItem } from "electrodb";
 import { dynamoConfig } from "../electro";
 
 // Quick note: I'm not sure what happened,
@@ -60,7 +60,11 @@ export const MessageEntity = new Entity(
 			// Event is for room metadata(?)
 			// could be people leaving and joining
 			type: {
-				type: ["llm", "user", "event"],
+				type: ["llm", "user", "event"] as const,
+				required: true,
+			},
+			action: {
+				type: ["message", "joinRoom", "leaveRoom"] as const,
 				required: true,
 			},
 			createdAt: {
@@ -116,3 +120,5 @@ export const MessageEntity = new Entity(
 	},
 	dynamoConfig,
 );
+
+export type MessageEntityType = EntityItem<typeof MessageEntity>;
