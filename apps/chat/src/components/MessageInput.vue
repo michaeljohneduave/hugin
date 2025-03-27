@@ -7,6 +7,7 @@ import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import {
   File as FileIcon,
   Plus as PlusIcon,
+  Send as SendIcon,
   Smile as SmileIcon,
   X as XIcon,
 } from "lucide-vue-next";
@@ -110,7 +111,7 @@ interface EmojiData {
 
 const insertEmoji = (emoji: EmojiData) => {
   messageInput.value += emoji.i;
-  showEmojiPicker.value = false;
+  // Keep the picker open, don't set showEmojiPicker to false
 };
 
 // Update the insertGif function
@@ -329,13 +330,24 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- GIF Picker -->
-        <div v-if="showGifPicker" class="absolute bottom-20 right-0 z-50">
-          <div class="fixed inset-0" @click="showGifPicker = false"></div>
-          <div class="relative">
-            <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
+        <div class="relative">
+          <button type="button" @click="showGifPicker = !showGifPicker"
+            class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+            <span class="font-semibold">GIF</span>
+          </button>
+
+          <!-- GIF Picker -->
+          <div v-show="showGifPicker" class="md:hidden fixed bottom-0 left-0 right-0 z-50">
+            <div class="fixed inset-0 bg-black/20 dark:bg-black/40" @click="showGifPicker = false"></div>
+            <div class="relative">
+              <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
+            </div>
           </div>
         </div>
+        <button type="submit" class="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+          :disabled="!messageInput.trim() && !selectedFile && !selectedVideoFile && !selectedAudioFile && !audioRecording">
+          <SendIcon class="h-5 w-5" />
+        </button>
       </div>
     </form>
   </div>
