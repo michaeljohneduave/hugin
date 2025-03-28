@@ -32,7 +32,9 @@ export default $config({
 		const dns = await import("./infra/dns");
 		const api = await import("./infra/api");
 		await import("./infra/local");
-		const { clerkPublishableKey } = await import("./infra/config");
+		const { clerkPublishableKey, vapidPublicKey } = await import(
+			"./infra/config"
+		);
 
 		const chatSite = new sst.aws.StaticSite("ChatSite", {
 			path: "apps/chat",
@@ -48,9 +50,10 @@ export default $config({
 						}
 					: null,
 			environment: {
-				VITE_TRPC_URL: $interpolate`${api.api.url}/trpc`,
+				VITE_API_URL: $interpolate`${api.api.url}`,
 				VITE_WEBSOCKET_API_URL: api.websocketApi.url,
 				VITE_CLERK_PUBLISHABLE_KEY: clerkPublishableKey.properties.key,
+				VITE_VAPID_PUBLIC_KEY: vapidPublicKey.properties.key,
 			},
 			dev: {
 				url: "http://localhost:5173",

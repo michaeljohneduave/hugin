@@ -15,3 +15,5 @@ export const CLOUDFLARE_API_TOKEN = new sst.Secret(
 
 export const CLERK_SECRET_KEY = new sst.Secret("CLERK_SECRET_KEY");
 export const GIPHY_API_KEY = new sst.Secret("GIPHY_API_KEY");
+
+export const VAPID_PRIVATE_KEY = new sst.Secret("VAPID_PRIVATE_KEY");

@@ -1,3 +1,4 @@
+import { vapidPublicKey } from "./config";
 import { MessageTable, Postgres, Valkey } from "./database";
 import { domain } from "./dns";
 import { vpc } from "./network";
@@ -7,9 +8,11 @@ import {
 	GIPHY_API_KEY,
 	GOOGLE_GENERATIVE_AI_API_KEY,
 	POSTGRES_CONN_URI,
+	VAPID_PRIVATE_KEY,
 } from "./secrets";
 
 export const api = new sst.aws.ApiGatewayV2("Api", {
+	vpc,
 	domain:
 		$app.stage === "prod"
 			? {
@@ -31,13 +34,29 @@ export const api = new sst.aws.ApiGatewayV2("Api", {
 });
 
 api.route("GET /trpc/{proxy+}", {
+	vpc,
 	handler: "packages/functions/src/trpc.api.handler",
-	link: [MessageTable, CLERK_SECRET_KEY, GIPHY_API_KEY],
+	link: [
+		MessageTable,
+		CLERK_SECRET_KEY,
+		GIPHY_API_KEY,
+		vapidPublicKey,
+		VAPID_PRIVATE_KEY,
+		Valkey,
+	],
 });
 
 api.route("POST /trpc/{proxy+}", {
+	vpc,
 	handler: "packages/functions/src/trpc.api.handler",
-	link: [MessageTable, CLERK_SECRET_KEY, GIPHY_API_KEY],
+	link: [
+		MessageTable,
+		CLERK_SECRET_KEY,
+		GIPHY_API_KEY,
+		vapidPublicKey,
+		VAPID_PRIVATE_KEY,
+		Valkey,
+	],
 });
 
 export const scraperFn = new sst.aws.Function("ScraperFn", {

@@ -70,12 +70,20 @@ declare module "sst" {
       "taskDefinition": string
       "type": "sst.aws.Task"
     }
+    "VAPID_PRIVATE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "Valkey": {
       "host": string
       "password": string
       "port": number
       "type": "sst.aws.Redis"
       "username": string
+    }
+    "VapidPublicKey": {
+      "key": string
+      "type": "sst.sst.Linkable"
     }
     "WebsocketApi": {
       "managementEndpoint": string
