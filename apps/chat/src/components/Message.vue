@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Bot, ChatPayloadEvent, ChatPayloadWithUser } from "@/pages/Chat.vue";
+import type { Bot, ChatPayloadWithUser } from "@/pages/Chat.vue";
 import { useSession } from "@clerk/vue"
 import type { ChatPayload } from "@hugin-bot/functions/src/types";
 import DOMPurify from 'isomorphic-dompurify';
