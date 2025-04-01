@@ -8,7 +8,7 @@ export const useTrpc = () => {
 	return createTRPCClient<AppRouter>({
 		links: [
 			httpBatchLink({
-				url: `${import.meta.env.VITE_TRPC_URL}`,
+				url: `${import.meta.env.VITE_API_URL}/trpc`,
 				async headers() {
 					const token = await session.value?.getToken();
 					return {
