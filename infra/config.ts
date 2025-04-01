@@ -4,8 +4,16 @@ export const clerkPublishableKey = new sst.Linkable("ClerkPublishableKey", {
 	},
 });
 
-export const vapidPublicKey = new sst.Linkable("VapidPublicKey", {
+export const firebaseConfig = new sst.Linkable("FirebaseConfig", {
 	properties: {
-		key: "BEZeLOj_pGVGNmYR14oexNoWAFZQKMidfU7grXs3KT4OlI7D6kA-Buu4_aYq9SWkkHgQGCe-g0l_n8Mu1vulg60",
+		apiKey: "AIzaSyDy4YGt8efbQbPWsk_VHC5h4KqqRQChz7c",
+		authDomain: "hugin-bot.firebaseapp.com",
+		projectId: "hugin-bot",
+		storageBucket: "hugin-bot.firebasestorage.app",
+		messagingSenderId: "87988393213",
+		appId: "1:87988393213:web:65269090bd0465bf755a94",
+		measurementId: "G-YFF7VZDH5Q",
+		vapidPublicKey:
+			"BDOSwqeNW7P0czvapv6EvXJMiSBcbBgQzpWs9xXLErvVqWSs0Qvg6m7aR8OlF-HONYQcybU4Q0ttK7fKFeDBfV4",
 	},
 });

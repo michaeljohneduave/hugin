@@ -32,7 +32,7 @@ export default $config({
 		const dns = await import("./infra/dns");
 		const api = await import("./infra/api");
 		await import("./infra/local");
-		const { clerkPublishableKey, vapidPublicKey } = await import(
+		const { clerkPublishableKey, firebaseConfig } = await import(
 			"./infra/config"
 		);
 
@@ -53,7 +53,8 @@ export default $config({
 				VITE_API_URL: $interpolate`${api.api.url}`,
 				VITE_WEBSOCKET_API_URL: api.websocketApi.url,
 				VITE_CLERK_PUBLISHABLE_KEY: clerkPublishableKey.properties.key,
-				VITE_VAPID_PUBLIC_KEY: vapidPublicKey.properties.key,
+				VITE_FIREBASE_CONFIG: JSON.stringify(firebaseConfig.properties),
+				VITE_FIREBASE_VAPID_KEY: firebaseConfig.properties.vapidPublicKey,
 			},
 			dev: {
 				url: "http://localhost:5173",

@@ -6,8 +6,8 @@ import { awsLambdaRequestHandler } from "@trpc/server/adapters/aws-lambda";
 import Valkey from "iovalkey";
 import { groupBy, prop } from "remeda";
 import { Resource } from "sst";
-import webpush from "web-push";
 import { z } from "zod";
+import { sendPushNotification } from "./lib/firebase";
 import { protectedProcedure, publicProcedure, router, t } from "./trpc";
 
 const redis =
@@ -33,26 +33,6 @@ const redis =
 					},
 				},
 			);
-
-webpush.setVapidDetails(
-	"mailto:info@meduave.com",
-	Resource.VapidPublicKey.key,
-	Resource.VAPID_PRIVATE_KEY.value,
-);
-
-// Add logging to verify VAPID setup
-console.log("[Debug] VAPID Setup:", {
-	publicKeyLength: Resource.VapidPublicKey.key.length,
-	privateKeyLength: Resource.VAPID_PRIVATE_KEY.value.length,
-	publicKeyFormat: /^[A-Za-z0-9_-]+$/.test(Resource.VapidPublicKey.key)
-		? "valid"
-		: "invalid",
-	privateKeyFormat: /^[A-Za-z0-9_-]+$/.test(Resource.VAPID_PRIVATE_KEY.value)
-		? "valid"
-		: "invalid",
-	publicKeyPrefix: Resource.VapidPublicKey.key.substring(0, 10),
-	privateKeyPrefix: Resource.VAPID_PRIVATE_KEY.value.substring(0, 10),
-});
 
 interface GiphySearchResponse {
 	data: Array<{
@@ -108,7 +88,7 @@ const giphy = router({
 
 const notifications = router({
 	getVapidPublicKey: publicProcedure.query(() => {
-		const vapidPublicKey = Resource.VapidPublicKey.key;
+		const vapidPublicKey = Resource.FirebaseConfig.vapidPublicKey;
 		return { vapidPublicKey };
 	}),
 
@@ -116,39 +96,49 @@ const notifications = router({
 		.input(
 			z.object({
 				userId: z.string(),
-				subscription: z.object({
-					endpoint: z.string(),
-					keys: z.object({
-						p256dh: z.string(),
-						auth: z.string(),
-					}),
-				}),
+				token: z.string(),
 			}),
 		)
 		.mutation(async ({ input }) => {
 			try {
-				// Store subscription in Redis with user ID as key
-				await redis.set(
-					`push:sub:${input.userId}`,
-					JSON.stringify(input.subscription),
-				);
+				// Add token to the user's set of tokens
+				const setKey = `push:tokens:${input.userId}`;
+				await redis.sadd(setKey, input.token);
+
+				// Set expiration for the token set (30 days)
+				await redis.expire(setKey, 30 * 24 * 60 * 60);
+
+				console.log("[Debug] Saved FCM token:", {
+					userId: input.userId,
+					token: input.token,
+				});
 				return { success: true };
 			} catch (error) {
-				console.error("Error saving push subscription:", error);
-				throw new Error("Failed to save push subscription");
+				console.error("[Debug] Error saving FCM token:", error);
+				throw error;
 			}
 		}),
 
 	deletePushSubscription: publicProcedure
-		.input(z.object({ userId: z.string() }))
+		.input(
+			z.object({
+				userId: z.string(),
+				token: z.string(),
+			}),
+		)
 		.mutation(async ({ input }) => {
 			try {
-				// Remove subscription from Redis
-				await redis.del(`push:sub:${input.userId}`);
+				// Remove the specific token from the user's set
+				const setKey = `push:tokens:${input.userId}`;
+				await redis.srem(setKey, input.token);
+				console.log("[Debug] Deleted FCM token for user:", {
+					userId: input.userId,
+					token: `${input.token.substring(0, 10)}...`,
+				});
 				return { success: true };
 			} catch (error) {
-				console.error("Error deleting push subscription:", error);
-				throw new Error("Failed to delete push subscription");
+				console.error("[Debug] Error deleting FCM token:", error);
+				throw error;
 			}
 		}),
 
@@ -163,82 +153,53 @@ const notifications = router({
 		)
 		.mutation(async ({ input }) => {
 			try {
-				// Get subscription from Redis
-				const subscriptionString = await redis.get(`push:sub:${input.userId}`);
-				if (!subscriptionString) {
-					throw new Error("No subscription found for user");
+				// Get all tokens for the user from the Redis set
+				const setKey = `push:tokens:${input.userId}`;
+				const tokens = await redis.smembers(setKey);
+
+				if (tokens.length === 0) {
+					throw new Error("No FCM tokens found for user");
 				}
 
-				const subscription = JSON.parse(subscriptionString);
 				console.log("[Debug] Sending push notification:", {
 					userId: input.userId,
-					subscription: {
-						endpoint: subscription.endpoint,
-						keys: {
-							p256dh: `${subscription.keys.p256dh.substring(0, 10)}...`,
-							auth: `${subscription.keys.auth.substring(0, 10)}...`,
-						},
-					},
-					vapidDetails: {
-						subject: "mailto:info@meduave.com",
-						publicKey: `${Resource.VapidPublicKey.key.substring(0, 10)}...`,
-						privateKey: `${Resource.VAPID_PRIVATE_KEY.value.substring(0, 10)}...`,
-					},
+					tokenCount: tokens.length,
 				});
 
-				// Send push notification
-				try {
-					await webpush.sendNotification(
-						subscription,
-						JSON.stringify({
-							title: input.title,
-							body: input.body,
-							url: input.url,
-						}),
-					);
-					console.log("[Debug] Push notification sent successfully:", {
+				// Send push notification to all tokens
+				const results = await Promise.allSettled(
+					tokens.map((token) =>
+						sendPushNotification(
+							token,
+							input.title,
+							input.body,
+							input.url ? { url: input.url } : undefined,
+						),
+					),
+				);
+
+				// Check for failed tokens and remove them
+				const failedTokens = results
+					.map((result, index) => {
+						if (result.status === "rejected") {
+							return tokens[index];
+						}
+						return null;
+					})
+					.filter((token): token is string => token !== null);
+
+				if (failedTokens.length > 0) {
+					await redis.srem(setKey, ...failedTokens);
+					console.log("[Debug] Removed failed tokens:", {
 						userId: input.userId,
-						subscriptionEndpoint: subscription.endpoint,
-						message: {
-							title: input.title,
-							body: input.body,
-							url: input.url,
-						},
+						failedCount: failedTokens.length,
 					});
-				} catch (error: unknown) {
-					const webpushError = error as Error & {
-						statusCode?: number;
-						headers?: Record<string, string>;
-						body?: string;
-					};
-					console.error("[Debug] WebPush error details:", {
-						name: webpushError.name,
-						message: webpushError.message,
-						statusCode: webpushError.statusCode,
-						headers: webpushError.headers,
-						body: webpushError.body,
-					});
-					throw webpushError;
 				}
 
 				return { success: true };
 			} catch (error) {
-				console.error("[Debug] Error sending push notification:", {
-					error:
-						error instanceof Error
-							? {
-									name: error.name,
-									message: error.message,
-									stack: error.stack,
-								}
-							: error,
-					userId: input.userId,
-				});
-				// If subscription is invalid (410 Gone), remove it
-				if (error instanceof Error && error.message.includes("410 Gone")) {
-					await redis.del(`push:sub:${input.userId}`);
-				}
-				throw new Error("Failed to send push notification");
+				console.error("[Debug] Error sending push notification:", error);
+				throw error;
 			}
 		}),
 });

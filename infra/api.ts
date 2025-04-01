@@ -1,10 +1,12 @@
-import { vapidPublicKey } from "./config";
 import { MessageTable, Postgres, Valkey } from "./database";
 import { domain } from "./dns";
 import { vpc } from "./network";
 import { task } from "./puppeteer";
 import {
 	CLERK_SECRET_KEY,
+	FIREBASE_CLIENT_EMAIL,
+	FIREBASE_PRIVATE_KEY,
+	FIREBASE_PROJECT_ID,
 	GIPHY_API_KEY,
 	GOOGLE_GENERATIVE_AI_API_KEY,
 	POSTGRES_CONN_URI,

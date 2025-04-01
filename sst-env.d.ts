@@ -33,6 +33,29 @@ declare module "sst" {
       "key": string
       "type": "sst.sst.Linkable"
     }
+    "FIREBASE_CLIENT_EMAIL": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FIREBASE_PRIVATE_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FIREBASE_PROJECT_ID": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "FirebaseConfig": {
+      "apiKey": string
+      "appId": string
+      "authDomain": string
+      "measurementId": string
+      "messagingSenderId": string
+      "projectId": string
+      "storageBucket": string
+      "type": "sst.sst.Linkable"
+      "vapidPublicKey": string
+    }
     "GIPHY_API_KEY": {
       "type": "sst.sst.Secret"
       "value": string
@@ -80,10 +103,6 @@ declare module "sst" {
       "port": number
       "type": "sst.aws.Redis"
       "username": string
-    }
-    "VapidPublicKey": {
-      "key": string
-      "type": "sst.sst.Linkable"
     }
     "WebsocketApi": {
       "managementEndpoint": string
