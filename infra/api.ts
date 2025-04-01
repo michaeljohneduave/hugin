@@ -35,33 +35,55 @@ export const api = new sst.aws.ApiGatewayV2("Api", {
 
 api.route("GET /trpc/{proxy+}", {
 	vpc,
+	transform: {
+		function: {
+			memorySize: 256,
+			architectures: ["arm64"],
+		},
+	},
 	handler: "packages/functions/src/trpc.api.handler",
 	link: [
 		MessageTable,
 		CLERK_SECRET_KEY,
 		GIPHY_API_KEY,
-		vapidPublicKey,
 		VAPID_PRIVATE_KEY,
 		Valkey,
+		FIREBASE_CLIENT_EMAIL,
+		FIREBASE_PROJECT_ID,
+		FIREBASE_PRIVATE_KEY,
 	],
 });
 
 api.route("POST /trpc/{proxy+}", {
 	vpc,
+	transform: {
+		function: {
+			memorySize: 256,
+			architectures: ["arm64"],
+		},
+	},
 	handler: "packages/functions/src/trpc.api.handler",
 	link: [
 		MessageTable,
 		CLERK_SECRET_KEY,
 		GIPHY_API_KEY,
-		vapidPublicKey,
 		VAPID_PRIVATE_KEY,
 		Valkey,
+		FIREBASE_CLIENT_EMAIL,
+		FIREBASE_PROJECT_ID,
+		FIREBASE_PRIVATE_KEY,
 	],
 });
 
 export const scraperFn = new sst.aws.Function("ScraperFn", {
 	handler: "packages/functions/src/llm.scrapeCompanyUrl",
 	link: [task, Postgres, POSTGRES_CONN_URI, GOOGLE_GENERATIVE_AI_API_KEY],
+	transform: {
+		function: {
+			memorySize: 256,
+			architectures: ["arm64"],
+		},
+	},
 });
 
 export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
@@ -92,6 +114,7 @@ websocketApi.route("$connect", {
 	transform: {
 		function: {
 			memorySize: 256,
+			architectures: ["arm64"],
 		},
 	},
 });
@@ -103,6 +126,7 @@ websocketApi.route("$disconnect", {
 	transform: {
 		function: {
 			memorySize: 128,
+			architectures: ["arm64"],
 		},
 	},
 });
@@ -114,6 +138,7 @@ websocketApi.route("$default", {
 	transform: {
 		function: {
 			memorySize: 256,
+			architectures: ["arm64"],
 		},
 	},
 	permissions: [
