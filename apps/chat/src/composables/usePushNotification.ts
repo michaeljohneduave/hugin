@@ -198,8 +198,7 @@ export function usePushNotification() {
 	// Background message handling is done in the service worker
 	// The service worker will receive the message and show the notification
 	// This is handled in the service-worker.ts file
-
-	async function testPushNotification() {
+	async function testPushNotification(msg: string) {
 		if (!user.value?.id) {
 			notification.error("You must be logged in to test notifications");
 			return;
@@ -210,7 +209,7 @@ export function usePushNotification() {
 			await trpc.notifications.sendPushNotification.mutate({
 				userId: user.value.id,
 				title: "Test Notification",
-				body: "This is a test push notification!",
+				body: msg,
 				url: "/",
 			});
 			console.log("[Debug] Push notification sent successfully");
@@ -238,22 +237,9 @@ export function usePushNotification() {
 		return permission;
 	}
 
-	async function initialize(userId: string): Promise<boolean> {
+	async function setupPushNotifications(userId: string): Promise<boolean> {
 		try {
-			isRegistering.value = true;
-			// Request permission and generate new token
-			const permission = await Notification.requestPermission();
-			if (permission !== "granted") return false;
-
-			// Check for existing token
-			const existingToken = getStoredToken();
-			console.log("[Debug] Existing token:", existingToken);
-			if (existingToken) {
-				// Verify token is still valid
-				const isValid = await registerToken(existingToken, userId);
-				if (isValid) return true;
-			}
-
+			// Register service worker
 			const registration = await registerServiceWorker();
 			if (!registration) return false;
 
@@ -264,6 +250,7 @@ export function usePushNotification() {
 				vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
 			});
 
+			// Generate and register token
 			const newToken = await generateToken(registration);
 			if (!newToken) return false;
 
@@ -271,6 +258,76 @@ export function usePushNotification() {
 			setupForegroundHandler();
 
 			return await registerToken(newToken, userId);
+		} catch (error) {
+			console.error(
+				"[Firebase Messaging] Error setting up push notifications:",
+				error,
+			);
+			return false;
+		}
+	}
+
+	async function initialize(userId: string): Promise<boolean> {
+		try {
+			isRegistering.value = true;
+
+			// Check current permission status
+			const currentPermission = await Notification.permission;
+
+			// If permission is already granted, proceed with token setup
+			if (currentPermission === "granted") {
+				// Check for existing token
+				const existingToken = getStoredToken();
+				console.log("[Debug] Existing token:", existingToken);
+				if (existingToken) {
+					// Verify token is still valid
+					const isValid = await registerToken(existingToken, userId);
+					if (isValid) return true;
+				}
+			} else if (currentPermission === "default") {
+				// First tier: Show friendly in-app notification
+				notification.info(
+					"Click to enable notifications and never miss a message",
+					{
+						title: "🔔 Get Notified",
+						duration: 10000,
+						closeable: true,
+						onClick: async () => {
+							// Second tier: Show browser permission prompt
+							const permission = await Notification.requestPermission();
+							if (permission === "granted") {
+								const success = await setupPushNotifications(userId);
+								if (success) {
+									notification.success("Notifications enabled successfully!");
+								} else {
+									notification.error(
+										"Failed to enable notifications. Please try again.",
+									);
+								}
+							} else {
+								notification.error(
+									"Permission to send notifications was denied",
+								);
+							}
+						},
+					},
+				);
+				return false;
+			} else if (currentPermission === "denied") {
+				// If previously denied, show a message about enabling in browser settings
+				notification.info(
+					"Please enable notifications in your browser settings to receive updates",
+					{
+						title: "Notifications Disabled",
+						duration: 10000,
+						closeable: true,
+					},
+				);
+				return false;
+			}
+
+			// If we get here, either permission was already granted or we need to set up new token
+			return await setupPushNotifications(userId);
 		} catch (error) {
 			console.error("[Firebase Messaging] Error initializing:", error);
 			return false;
@@ -355,5 +412,6 @@ export function usePushNotification() {
 		initialize,
 		isLoading,
 		isRegistering,
+		setupPushNotifications,
 	};
 }

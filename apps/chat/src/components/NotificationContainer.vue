@@ -64,8 +64,11 @@ const getIconClasses = (type: string) => {
       leave-active-class="transition duration-200 ease-in" leave-from-class="transform translate-x-0 opacity-100"
       leave-to-class="transform translate-x-full opacity-0">
       <div v-for="notification in notifications" :key="notification.id"
-        class="flex items-start p-4 rounded-lg shadow-lg border w-full"
-        :class="[getNotificationClasses(notification.type)]" role="alert">
+        class="flex items-start p-4 rounded-lg shadow-lg border w-full cursor-pointer"
+        :class="[getNotificationClasses(notification.type)]" role="alert" @click="() => {
+          notification.onClick?.();
+          remove(notification.id);
+        }">
         <div class="flex-shrink-0 mr-3">
           <component :is="getIcon(notification.type)" class="w-5 h-5" :class="[getIconClasses(notification.type)]" />
         </div>

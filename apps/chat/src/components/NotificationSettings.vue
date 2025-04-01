@@ -5,7 +5,7 @@ import { useAuth } from "../composables/useAuth";
 import { useNotification } from "../composables/useNotification";
 import { usePushNotification } from "../composables/usePushNotification";
 
-const { isSupported, token, requestPermission, unsubscribe, testPushNotification, checkNotificationPermission, initialize, isLoading, isRegistering } = usePushNotification()
+const { isSupported, token, requestPermission, unsubscribe, testPushNotification, checkNotificationPermission, initialize, isLoading, isRegistering, setupPushNotifications } = usePushNotification()
 const notification = useNotification()
 const permissionStatus = ref<NotificationPermission | 'unsupported'>('default')
 const { user } = useAuth()
@@ -17,7 +17,6 @@ async function checkPermission() {
 }
 
 async function toggleNotifications() {
-  console.log('token', token.value)
   try {
     if (token.value) {
       await unsubscribe()
@@ -32,15 +31,11 @@ async function toggleNotifications() {
         return
       }
 
-      // notification.info(
-      //   "You'll need to allow notifications in your browser settings to receive updates about new messages. Click 'Allow' when prompted!"
-      // )
-
       const permission = await requestPermission();
 
       if (permission === "granted") {
         // Initialize push notifications
-        const success = await initialize(user.value?.id || '');
+        const success = await setupPushNotifications(user.value?.id || '');
         if (success) {
           notification.success("Notifications enabled successfully!");
         } else {
@@ -58,7 +53,7 @@ async function toggleNotifications() {
 
 async function sendTestNotification() {
   try {
-    await testPushNotification()
+    await testPushNotification(`Test push notification! ${new Date().toLocaleString()}`)
   } catch (error) {
     console.error('Error sending test notification:', error)
   }
