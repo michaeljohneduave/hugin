@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import loebotteAvatar from "@/assets/loebotte.webp";
-import pearlAvatar from "@/assets/pearl.webp";
+import loebotteAvatar from "@/assets/loebotte-avatar.webp";
+import pearlAvatar from "@/assets/pearl-avatar.webp";
 import Message from "@/components/Message.vue";
 import RoomEvent from '@/components/RoomEvent.vue';
 import Sidebar from "@/components/Sidebar.vue"
