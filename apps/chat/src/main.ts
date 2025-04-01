@@ -5,7 +5,15 @@ import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { initializeClerk } from "./lib/clerk";
+import { registerServiceWorker } from "./lib/service-worker";
 import router from "./router";
+
+// Register service worker
+if ("serviceWorker" in navigator) {
+	registerServiceWorker().catch((error) => {
+		console.error("[Service Worker] Registration failed:", error);
+	});
+}
 
 // Initialize Clerk before mounting the app
 initializeClerk()

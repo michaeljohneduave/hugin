@@ -15,5 +15,32 @@ declare module "sst" {
 			type: string;
 			value: string;
 		};
+
+		export const Valkey: {
+			host: string;
+			port: number;
+			username: string;
+			password: string;
+		};
+
+		export const FirebaseConfig: {
+			vapidPublicKey: string;
+		};
+
+		export const VAPID_PRIVATE_KEY: {
+			value: string;
+		};
+
+		export const FIREBASE_PROJECT_ID: {
+			value: string;
+		};
+
+		export const FIREBASE_PRIVATE_KEY: {
+			value: string;
+		};
+
+		export const FIREBASE_CLIENT_EMAIL: {
+			value: string;
+		};
 	}
 }
