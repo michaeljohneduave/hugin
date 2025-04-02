@@ -1,12 +1,12 @@
+import { initializeApp } from "firebase/app";
+import { getMessaging, onBackgroundMessage } from "firebase/messaging/sw";
+import { precacheAndRoute } from "workbox-precaching";
+
 // Service Worker for Firebase Cloud Messaging
 const SW_VERSION = "1.0.0";
 console.log("[Service Worker] Version:", SW_VERSION);
 
-// Import Firebase SDK
-importScripts(
-	"https://www.gstatic.com/firebasejs/11.6.0/firebase-app-compat.js",
-	"https://www.gstatic.com/firebasejs/11.6.0/firebase-messaging-compat.js",
-);
+precacheAndRoute(self.__WB_MANIFEST);
 
 // Constants
 const NOTIFICATION_ICON = "/pwa-192x192.png";
@@ -18,35 +18,12 @@ const TOKEN_EXPIRY = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 let messaging = null;
 let isInitialized = false;
 
-// Token Management
-function getStoredToken() {
-	const stored = self.localStorage.getItem(TOKEN_STORAGE_KEY);
-	if (!stored) return null;
-
-	try {
-		const tokenInfo = JSON.parse(stored);
-		// Check if token is expired
-		if (Date.now() - tokenInfo.timestamp > TOKEN_EXPIRY) {
-			self.localStorage.removeItem(TOKEN_STORAGE_KEY);
-			return null;
-		}
-		return tokenInfo.token;
-	} catch {
-		self.localStorage.removeItem(TOKEN_STORAGE_KEY);
-		return null;
-	}
-}
-
 function storeToken(newToken) {
 	const tokenInfo = {
 		token: newToken,
 		timestamp: Date.now(),
 	};
 	self.localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokenInfo));
-}
-
-function removeToken() {
-	self.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 // Notification options factory
@@ -72,13 +49,13 @@ function initializeFirebase(config) {
 	}
 
 	try {
-		firebase.initializeApp(config);
-		messaging = firebase.messaging();
+		const app = initializeApp(config);
+		messaging = getMessaging(app);
 		isInitialized = true;
 		console.log("[Firebase Messaging] Initialized successfully");
 
 		// Set up background message handler once
-		messaging.onBackgroundMessage(handleBackgroundMessage);
+		onBackgroundMessage(messaging, handleBackgroundMessage);
 	} catch (error) {
 		console.error("[Firebase Messaging] Initialization failed:", error);
 		throw error;

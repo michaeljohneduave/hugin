@@ -15,11 +15,20 @@ export default defineConfig({
 				},
 			},
 		}),
-		// vueDevTools(),
 		tailwindcss(),
+		vueDevTools(),
 		VitePWA({
-			disable: process.env.NODE_ENV === "development",
+			strategies: "injectManifest",
+			injectManifest: {
+				maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
+			},
+			srcDir: "src/sw",
+			filename: "service-worker.js",
 			registerType: "autoUpdate",
+			devOptions: {
+				enabled: true,
+				type: "module",
+			},
 			includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.png"],
 			manifest: {
 				name: "Hugin Chat",
@@ -39,28 +48,6 @@ export default defineConfig({
 						purpose: "any maskable",
 					},
 				],
-			},
-			workbox: {
-				maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
-				cleanupOutdatedCaches: true,
-				runtimeCaching: [
-					{
-						urlPattern: /^https:\/\/api\.*/i,
-						handler: "NetworkFirst",
-						options: {
-							cacheName: "api-cache",
-							networkTimeoutSeconds: 10,
-							cacheableResponse: {
-								statuses: [0, 200],
-							},
-						},
-					},
-				],
-				// Ensure service worker doesn't interfere with Firebase messaging
-				navigateFallback: "/index.html",
-				navigateFallbackDenylist: [/^\/api/],
-				skipWaiting: true,
-				clientsClaim: true,
 			},
 		}),
 	],

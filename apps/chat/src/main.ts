@@ -5,7 +5,6 @@ import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
 import { initializeClerk } from "./lib/clerk";
-import { registerServiceWorker } from "./lib/service-worker";
 import router from "./router";
 
 // Initialize Clerk before mounting the app

@@ -7,19 +7,11 @@ export async function registerServiceWorker() {
 	}
 
 	try {
-		// Unregister any existing service workers
-		const registrations = await navigator.serviceWorker.getRegistrations();
-		await Promise.all(
-			registrations.map((registration) => registration.unregister()),
-		);
-		console.log("[Service Worker] Unregistered existing service workers");
+		const [registration] = await navigator.serviceWorker.getRegistrations();
 
-		const registration = await navigator.serviceWorker.register(
-			"/firebase-messaging-sw.js",
-			{
-				scope: "/",
-			},
-		);
+		const cacheKeys = await caches.keys();
+		await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+		console.log("[Service Worker] Cleared existing caches");
 
 		// Pass Firebase configuration to the service worker
 		await registration.active?.postMessage({
@@ -30,9 +22,10 @@ export async function registerServiceWorker() {
 		console.log("[Service Worker] Registration successful:", registration);
 		return registration;
 	} catch (error) {
-		console.error("[Service Worker] Registration failed:", error);
 		if (error instanceof Error) {
 			console.error("[Service Worker] Error details:", error.message);
+		} else {
+			console.error("[Service Worker] Registration failed:", error);
 		}
 		return null;
 	}
