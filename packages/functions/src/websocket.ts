@@ -9,59 +9,23 @@ import { router } from "@hugin-bot/core/src/ai/router";
 import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
 import type { APIGatewayProxyEvent } from "aws-lambda";
-import Valkey from "iovalkey";
+import Valkey, { type Redis } from "iovalkey";
 import { Resource } from "sst";
+import {
+	type ConnectionStorage,
+	createConnectionStorage,
+} from "./lib/connection-storage";
 import type { ChatPayload, CustomJwtPayload, MessagePayload } from "./types";
-
-const USERID_CONNECTIONID_TTL_SEC = 600;
-
-const redis =
-	Resource.Valkey.host === "localhost"
-		? new Valkey({
-				host: Resource.Valkey.host,
-				port: Resource.Valkey.port,
-			})
-		: new Valkey.Cluster(
-				[
-					{
-						host: Resource.Valkey.host,
-						port: Resource.Valkey.port,
-					},
-				],
-				{
-					dnsLookup: (address, callback) => callback(null, address),
-					slotsRefreshTimeout: 2000,
-					redisOptions: {
-						tls: {},
-						username: Resource.Valkey.username,
-						password: Resource.Valkey.password,
-					},
-				},
-			);
 
 const apiClient = new ApiGatewayManagementApiClient({
 	endpoint: Resource.WebsocketApi.managementEndpoint,
 	maxAttempts: 0,
 });
 
-async function refreshRedisConnectionId(
-	userId: string,
-	token: string,
-	connectionId: string,
-	extendPipeline = false,
-) {
-	await redis
-		.pipeline()
-		.sadd(`user:${userId}`, [connectionId])
-		.expire(`user:${userId}`, USERID_CONNECTIONID_TTL_SEC)
-		.set(
-			`connection:${connectionId}`,
-			`${userId}--${token}`,
-			"EX",
-			USERID_CONNECTIONID_TTL_SEC,
-		)
-		.exec();
-}
+const connectionStorage: ConnectionStorage = createConnectionStorage(
+	"dynamodb",
+	// redis as Redis,
+);
 
 // Handles rejoining existing rooms (user becoming online)
 export const connect = async (event: APIGatewayProxyEvent) => {
@@ -107,22 +71,22 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 			console.log("User is in 100 rooms");
 		}
 
-		await refreshRedisConnectionId(
+		await connectionStorage.refreshUserConnection(
 			verifiedToken.sub,
 			token,
 			connectionId,
-			true,
 		);
 
-		let pipeline = redis.pipeline();
-
-		for (const room of rooms.data) {
-			pipeline = pipeline.sadd(`room:${room.roomId}:members`, [
-				verifiedToken.sub,
-			]);
-		}
-
-		await pipeline.exec();
+		// Join all rooms
+		await Promise.all(
+			rooms.data.map((room) =>
+				connectionStorage.addUserToRoom(
+					room.roomId,
+					verifiedToken.sub,
+					connectionId,
+				),
+			),
+		);
 
 		return {
 			statusCode: 200,
@@ -176,31 +140,29 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 				}
 
 				await Promise.allSettled([
-					// Refresh jwt tokens
-					refreshRedisConnectionId(
+					connectionStorage.refreshUserConnection(
 						verifiedToken.sub,
 						payload.token,
 						connectionId,
 					),
-					// Send pong
 					pong(connectionId),
 				]);
 				break;
 			}
 			case "joinRoom": {
-				const [userId, token] =
-					(await redis.get(`connection:${connectionId}`))?.split("--") || [];
-
-				if (!userId || !token) {
+				const connectionData =
+					await connectionStorage.getConnectionData(connectionId);
+				if (!connectionData) {
 					return {
 						statusCode: 400,
 					};
 				}
-				const jwtPayload = decodeJwt(token).payload as CustomJwtPayload;
+				const jwtPayload = decodeJwt(connectionData.token)
+					.payload as CustomJwtPayload;
 				await Promise.all([
 					RoomEntity.upsert({
 						roomId: payload.roomId,
-						userId: userId,
+						userId: connectionData.userId,
 						user: {
 							firstName: jwtPayload.firstName,
 							lastName: jwtPayload.lastName,
@@ -209,15 +171,18 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 					}).go({
 						response: "none",
 					}),
-					redis.sadd(`room:${payload.roomId}:members`, [userId]),
+					connectionStorage.addUserToRoom(
+						payload.roomId,
+						connectionData.userId,
+						connectionId,
+					),
 				]);
 				break;
 			}
 			case "leaveRoom": {
-				const [userId, token] =
-					(await redis.get(`connection:${connectionId}`))?.split("--") || [];
-
-				if (!userId || !token) {
+				const connectionData =
+					await connectionStorage.getConnectionData(connectionId);
+				if (!connectionData) {
 					return {
 						statusCode: 400,
 					};
@@ -226,9 +191,12 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 				await Promise.all([
 					RoomEntity.delete({
 						roomId: payload.roomId,
-						userId: userId,
+						userId: connectionData.userId,
 					}).go(),
-					redis.srem(`room:${payload.roomId}:members`, [userId]),
+					connectionStorage.removeUserFromRoom(
+						payload.roomId,
+						connectionData.userId,
+					),
 				]);
 				break;
 			}
@@ -271,16 +239,14 @@ async function multiSendMsg(message: ChatPayload, connectionIds: string[]) {
 				.catch(async (error: Error) => {
 					// Clean up connectionIds not deleted on disconnect
 					if (error.name === "GoneException") {
-						const connectionData = await redis.get(`connection:${conn}`);
-						const [userId] = connectionData?.split("--") || [];
-
-						if (userId) {
-							await Promise.allSettled([
-								redis.del([`connection:${conn}`]),
-								redis.srem(`user:${userId}`, [conn]),
-							]);
+						const connectionData =
+							await connectionStorage.getConnectionData(conn);
+						if (connectionData) {
+							await connectionStorage.removeConnection(
+								conn,
+								connectionData.userId,
+							);
 						}
-
 						return;
 					}
 					throw error;
@@ -298,14 +264,16 @@ async function getLLMResponse({
 	message: string;
 	connectionIds: string[];
 }) {
-	const { text } = await router([
+	const response = await router([
 		{
 			role: "user",
 			content: message,
 		},
 	]);
-
+	const text = response.text;
 	const senderId = "gemini";
+
+	console.log("response", response);
 
 	const chatPayload: ChatPayload = {
 		messageId: crypto.randomUUID(),
@@ -336,24 +304,19 @@ export const sendMessage = async (
 	payload: ChatPayload,
 	connectionId: string,
 ) => {
-	const value = await redis.get(`connection:${connectionId}`);
-	const [userId, token] = value?.split("--") || [];
-
-	if (!token) {
-		throw new Error("Jwt token not found");
+	const connectionData =
+		await connectionStorage.getConnectionData(connectionId);
+	if (!connectionData) {
+		throw new Error("Connection data not found");
 	}
 
-	// console.log("decoding value", value);
-	// console.log("decoding token", token);
-	const jwtPayload = decodeJwt(token);
-	const userIds = await redis.smembers(`room:${payload.roomId}:members`);
-	let pipeline = redis.pipeline();
+	const jwtPayload = decodeJwt(connectionData.token);
+	const roomMembers = await connectionStorage.getRoomMembers(payload.roomId);
 
-	for (const userId of userIds) {
-		pipeline = pipeline.smembers(`user:${userId}`);
-	}
+	const connectionIds = await Promise.all(
+		roomMembers.map((userId) => connectionStorage.getUserConnections(userId)),
+	);
 
-	const results = await pipeline.exec();
 	const messageId = crypto.randomUUID();
 
 	MessageEntity.create({
@@ -370,15 +333,7 @@ export const sendMessage = async (
 		.go()
 		.catch(console.error);
 
-	const connectionIds =
-		results?.flatMap((result) => {
-			// has error
-			if (result[0]) {
-				return [];
-			}
-
-			return result[1] as string[];
-		}) || [];
+	const allConnectionIds = connectionIds.flat();
 
 	const message: ChatPayload = {
 		messageId,
@@ -396,14 +351,14 @@ export const sendMessage = async (
 				}),
 	};
 
-	await multiSendMsg(message, connectionIds);
+	await multiSendMsg(message, allConnectionIds);
 
 	// if llm tag is detected send the message to the router function
 	if (payload.mentions && message.message) {
 		await getLLMResponse({
 			roomId: payload.roomId,
 			message: payload.message,
-			connectionIds,
+			connectionIds: allConnectionIds,
 		});
 	}
 };
@@ -413,26 +368,19 @@ export const disconnect = async (event: APIGatewayProxyEvent) => {
 	try {
 		const token = event.queryStringParameters?.token;
 		const connectionId = event.requestContext.connectionId;
-		if (!token) {
+		if (!token || !connectionId) {
 			return {
 				statusCode: 200,
 			};
 		}
 
-		if (!connectionId) {
-			return {
-				statusCode: 200,
-			};
-		}
-
-		const connectionData = await redis.get(`connection:${connectionId}`);
-		const [userId] = connectionData?.split("--") || [];
-
-		if (userId) {
-			await Promise.allSettled([
-				redis.del([`connection:${connectionId}`]),
-				redis.srem(`user:${userId}`, [connectionId]),
-			]);
+		const connectionData =
+			await connectionStorage.getConnectionData(connectionId);
+		if (connectionData) {
+			await connectionStorage.removeConnection(
+				connectionId,
+				connectionData.userId,
+			);
 		}
 
 		return {

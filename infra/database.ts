@@ -1,5 +1,3 @@
-import { vpc } from "./network";
-
 export const Postgres = new sst.Linkable("Postgres", {
 	properties: {
 		dbName: "defaultdb",
@@ -36,13 +34,4 @@ export const MessageTable = new sst.aws.Dynamo("MessageTable", {
 		},
 	},
 	ttl: "expireAt",
-});
-
-export const Valkey = new sst.aws.Redis("Valkey", {
-	vpc: vpc,
-	engine: "valkey",
-	dev: {
-		host: "localhost",
-		port: 6379,
-	},
 });

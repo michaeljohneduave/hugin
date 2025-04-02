@@ -9,11 +9,4 @@ if ($app.stage !== "prod") {
 			command: "npx drizzle-kit studio",
 		},
 	});
-
-	new sst.x.DevCommand("LocalRedis", {
-		dev: {
-			directory: "packages/containers",
-			command: "docker compose -f redis.yml up",
-		},
-	});
 }

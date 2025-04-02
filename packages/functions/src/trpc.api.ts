@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
+import { PnSubscriptionEntity } from "@hugin-bot/core/src/entities/pnSubscription.dynamo";
 import { RoomMessagesService } from "@hugin-bot/core/src/entities/room-messages.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
 import { awsLambdaRequestHandler } from "@trpc/server/adapters/aws-lambda";
@@ -9,30 +10,6 @@ import { Resource } from "sst";
 import { z } from "zod";
 import { sendPushNotification } from "./lib/firebase";
 import { protectedProcedure, publicProcedure, router, t } from "./trpc";
-
-const redis =
-	Resource.Valkey.host === "localhost"
-		? new Valkey({
-				host: Resource.Valkey.host,
-				port: Resource.Valkey.port,
-			})
-		: new Valkey.Cluster(
-				[
-					{
-						host: Resource.Valkey.host,
-						port: Resource.Valkey.port,
-					},
-				],
-				{
-					dnsLookup: (address, callback) => callback(null, address),
-					slotsRefreshTimeout: 2000,
-					redisOptions: {
-						tls: {},
-						username: Resource.Valkey.username,
-						password: Resource.Valkey.password,
-					},
-				},
-			);
 
 interface GiphySearchResponse {
 	data: Array<{
@@ -101,12 +78,10 @@ const notifications = router({
 		)
 		.mutation(async ({ input }) => {
 			try {
-				// Add token to the user's set of tokens
-				const setKey = `push:tokens:${input.userId}`;
-				await redis.sadd(setKey, input.token);
-
-				// Set expiration for the token set (30 days)
-				await redis.expire(setKey, 30 * 24 * 60 * 60);
+				await PnSubscriptionEntity.upsert({
+					userId: input.userId,
+					token: input.token,
+				}).go();
 
 				console.log("[Debug] Saved FCM token:", {
 					userId: input.userId,
@@ -128,9 +103,11 @@ const notifications = router({
 		)
 		.mutation(async ({ input }) => {
 			try {
-				// Remove the specific token from the user's set
-				const setKey = `push:tokens:${input.userId}`;
-				await redis.srem(setKey, input.token);
+				await PnSubscriptionEntity.delete({
+					userId: input.userId,
+					token: input.token,
+				}).go();
+
 				console.log("[Debug] Deleted FCM token for user:", {
 					userId: input.userId,
 					token: `${input.token.substring(0, 10)}...`,
@@ -153,13 +130,18 @@ const notifications = router({
 		)
 		.mutation(async ({ input }) => {
 			try {
-				// Get all tokens for the user from the Redis set
-				const setKey = `push:tokens:${input.userId}`;
-				const tokens = await redis.smembers(setKey);
+				// Get all tokens for the user
+				const subscriptions = await PnSubscriptionEntity.query
+					.primary({
+						userId: input.userId,
+					})
+					.go();
 
-				if (tokens.length === 0) {
+				if (subscriptions.data.length === 0) {
 					throw new Error("No FCM tokens found for user");
 				}
+
+				const tokens = subscriptions.data.map((sub) => sub.token);
 
 				console.log("[Debug] Sending push notification:", {
 					userId: input.userId,
@@ -189,7 +171,13 @@ const notifications = router({
 					.filter((token): token is string => token !== null);
 
 				if (failedTokens.length > 0) {
-					await redis.srem(setKey, ...failedTokens);
+					await PnSubscriptionEntity.delete(
+						failedTokens.map((token) => ({
+							userId: input.userId,
+							token,
+						})),
+					).go();
+
 					console.log("[Debug] Removed failed tokens:", {
 						userId: input.userId,
 						failedCount: failedTokens.length,
