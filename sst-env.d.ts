@@ -68,10 +68,6 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
-    "OurVpc": {
-      "bastion": string
-      "type": "sst.aws.Vpc"
-    }
     "POSTGRES_CONN_URI": {
       "type": "sst.sst.Secret"
       "value": string
@@ -84,25 +80,9 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Function"
     }
-    "ScraperTask": {
-      "assignPublicIp": boolean
-      "cluster": string
-      "containers": any
-      "securityGroups": any
-      "subnets": any
-      "taskDefinition": string
-      "type": "sst.aws.Task"
-    }
     "VAPID_PRIVATE_KEY": {
       "type": "sst.sst.Secret"
       "value": string
-    }
-    "Valkey": {
-      "host": string
-      "password": string
-      "port": number
-      "type": "sst.aws.Redis"
-      "username": string
     }
     "WebsocketApi": {
       "managementEndpoint": string
