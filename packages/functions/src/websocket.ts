@@ -15,7 +15,11 @@ import {
 	type ConnectionStorage,
 	createConnectionStorage,
 } from "./lib/connection-storage";
-import type { ChatPayload, CustomJwtPayload, MessagePayload } from "./types";
+import type {
+	ChatPayload,
+	CustomJwtPayload,
+	MessagePayload,
+} from "./lib/types";
 
 const apiClient = new ApiGatewayManagementApiClient({
 	endpoint: Resource.WebsocketApi.managementEndpoint,

@@ -9,7 +9,7 @@ import { groupBy, prop } from "remeda";
 import { Resource } from "sst";
 import { z } from "zod";
 import { sendPushNotification } from "./lib/firebase";
-import { protectedProcedure, publicProcedure, router, t } from "./trpc";
+import { protectedProcedure, publicProcedure, router, t } from "./lib/trpc";
 
 interface GiphySearchResponse {
 	data: Array<{

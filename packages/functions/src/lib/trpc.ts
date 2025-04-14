@@ -5,7 +5,7 @@ import {
 } from "@trpc/server";
 import type { CreateAWSLambdaContextOptions } from "@trpc/server/adapters/aws-lambda";
 import type { APIGatewayProxyEvent, APIGatewayProxyEventV2 } from "aws-lambda";
-import type { appRouter } from "./trpc.api";
+import type { appRouter } from "../trpc.api";
 
 export function createContext(
 	opts: CreateAWSLambdaContextOptions<
