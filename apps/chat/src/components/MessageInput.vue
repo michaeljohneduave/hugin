@@ -3,7 +3,7 @@ import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
 import type { Bot } from '@/pages/Chat.vue';
-import type { ChatPayload } from "@hugin-bot/functions/src/types";
+import type { ChatPayload } from "@hugin-bot/functions/src/lib/types";
 import {
   File as FileIcon,
   Plus as PlusIcon,

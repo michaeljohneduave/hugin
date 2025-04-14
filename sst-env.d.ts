@@ -76,6 +76,10 @@ declare module "sst" {
       "dbName": string
       "type": "sst.sst.Linkable"
     }
+    "Puppeteer": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "ScraperFn": {
       "name": string
       "type": "sst.aws.Function"

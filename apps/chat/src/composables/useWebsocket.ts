@@ -1,7 +1,6 @@
 import { WebSocketManager } from "@/lib/ws";
 import { useAuth, useSession } from "@clerk/vue";
-import type { MessagePayload } from "@hugin-bot/functions/src/types";
-import type { ComputedRefSymbol } from "@vue/reactivity";
+import type { MessagePayload } from "@hugin-bot/functions/src/lib/types";
 import { jwtDecode } from "jwt-decode";
 import { watch } from "vue";
 
@@ -13,8 +12,6 @@ export function useWebsocket() {
 	// Set up the getToken function for reconnection
 	ws.setGetToken(async () => {
 		const token = await getToken.value();
-
-		console.log(new Date(jwtDecode(token!).exp! * 1000));
 		return token;
 	});
 

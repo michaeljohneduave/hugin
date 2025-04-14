@@ -43,7 +43,7 @@ const { data: trendingGifs } = useQuery({
 			limit: 20,
 		});
 	},
-	enabled: true,
+	enabled: import.meta.env.PROD,
 	staleTime: 1000 * 60 * 60,
 	refetchOnMount: true,
 });

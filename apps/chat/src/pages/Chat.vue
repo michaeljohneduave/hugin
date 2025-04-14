@@ -7,8 +7,8 @@ import Sidebar from "@/components/Sidebar.vue"
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
-import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
-import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/types";
+import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
+import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/lib/types";
 import {
 	BellIcon,
 	LogOutIcon,
