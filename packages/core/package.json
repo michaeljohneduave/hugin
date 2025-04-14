@@ -8,6 +8,7 @@
   "dependencies": {
     "@ai-sdk/google": "^1.1.16",
     "@aws-sdk/client-dynamodb": "^3.767.0",
+    "@aws-sdk/client-lambda": "^3.782.0",
     "ai": "^4.1.44",
     "electrodb": "^3.4.1",
     "pg": "^8.13.3",

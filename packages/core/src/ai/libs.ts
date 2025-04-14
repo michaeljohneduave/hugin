@@ -1,4 +1,4 @@
-import { cleanUrl } from "@hugin-bot/scraper/src/utils/cleanUrl";
+import { cleanUrl } from "@hugin-bot/functions/src/lib/puppeteer/utils/cleanUrl";
 import { embedMany } from "ai";
 import { db } from "../drizzle";
 import { type NewUrl, Urls } from "../entities/url.sql";

@@ -1,13 +1,9 @@
-import getSitemap from "@hugin-bot/scraper/src/utils/getSitemap";
+import { InvokeCommand, LambdaClient } from "@aws-sdk/client-lambda";
+import getSitemap from "@hugin-bot/functions/src/lib/puppeteer/utils/getSitemap";
 import { tool } from "ai";
-import { eq } from "drizzle-orm";
 import { Resource } from "sst";
-import { task } from "sst/aws/task";
 import { z } from "zod";
-import { db } from "../../drizzle";
-import { Tasks } from "../../entities/task.sql";
 import { storePriorityUrls } from "../libs";
-import { getSiteScrapingPurpose } from "../prompts";
 
 export const scrapeUrl = tool({
 	description: `
@@ -35,25 +31,14 @@ export const scrapeUrl = tool({
 			);
 		}
 
-		const response = await task.run(Resource.ScraperTask);
-		const str = response.arn.split("/").pop()!;
+		const lambda = new LambdaClient({});
+		const command = new InvokeCommand({
+			FunctionName: Resource.Puppeteer.name,
+		});
 
-		const record = await db
-			.insert(Tasks)
-			.values({
-				arn: response.arn,
-			})
-			.onConflictDoNothing()
-			.returning({
-				id: Tasks.id,
-			});
+		const response = await lambda.send(command);
 
-		// TODO: Store the arn someplace else.
-		// or truncate the arn
-		return {
-			id: record[0].id,
-			status: response.status,
-		};
+		const payload = JSON.parse(new TextDecoder().decode(response.Payload));
 	},
 });
 
@@ -67,20 +52,17 @@ export const scrapingTaskStatus = tool({
 		arn: z.string(),
 	}),
 	execute: async (params) => {
-		const [currentTask] = await db
-			.select()
-			.from(Tasks)
-			.where(eq(Tasks.id, params.arn));
-
-		if (!currentTask) {
-			return "Task doesn't exist";
-		}
-
-		const response = await task.describe(Resource.ScraperTask, currentTask.arn);
-
-		return {
-			id: currentTask?.id,
-			status: response.status,
-		};
+		// const [currentTask] = await db
+		// 	.select()
+		// 	.from(Tasks)
+		// 	.where(eq(Tasks.id, params.arn));
+		// if (!currentTask) {
+		// 	return "Task doesn't exist";
+		// }
+		// const response = await task.describe(Resource.ScraperTask, currentTask.arn);
+		// return {
+		// 	id: currentTask?.id,
+		// 	status: response.status,
+		// };
 	},
 });
