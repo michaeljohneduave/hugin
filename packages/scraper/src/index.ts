@@ -1,4 +1,3 @@
-import { google } from "@ai-sdk/google";
 import {
 	generateEmbeddings,
 	storePriorityUrls,
@@ -11,7 +10,6 @@ import { db } from "@hugin-bot/core/src/drizzle";
 import { Contents } from "@hugin-bot/core/src/entities/content.sql";
 import { type Url, Urls } from "@hugin-bot/core/src/entities/url.sql";
 import { sleep } from "@hugin-bot/core/src/utils";
-import { embedMany } from "ai";
 import { eq } from "drizzle-orm";
 import Muppeteer from "./muppeteer";
 
@@ -36,7 +34,7 @@ async function main() {
 
 				await page.close();
 
-				if (!readable) {
+				if (!readable || !readable.textContent) {
 					continue;
 				}
 
