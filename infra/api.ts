@@ -1,5 +1,6 @@
 import { MessageTable, Postgres } from "./database";
 import { domain } from "./dns";
+import { puppeteerFn } from "./puppeteer";
 import {
 	CLERK_SECRET_KEY,
 	FIREBASE_CLIENT_EMAIL,
@@ -72,7 +73,12 @@ api.route("POST /trpc/{proxy+}", {
 
 export const scraperFn = new sst.aws.Function("ScraperFn", {
 	handler: "packages/functions/src/llm.scrapeCompanyUrl",
-	link: [Postgres, POSTGRES_CONN_URI, GOOGLE_GENERATIVE_AI_API_KEY],
+	link: [
+		Postgres,
+		POSTGRES_CONN_URI,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		puppeteerFn,
+	],
 	transform: {
 		function: {
 			memorySize: 256,
