@@ -45,7 +45,7 @@ export default $config({
 			domain:
 				$app.stage === "prod"
 					? {
-							name: `chat.${dns.domain}`,
+							name: dns.chatSiteDomain,
 							dns: sst.cloudflare.dns({}),
 						}
 					: null,

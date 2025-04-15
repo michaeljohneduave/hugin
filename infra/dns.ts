@@ -5,3 +5,5 @@ export const domain = {
 export const zone = cloudflare.getZoneOutput({
 	name: "meduave.com",
 });
+
+export const chatSiteDomain = $interpolate`chat.${domain}`;
