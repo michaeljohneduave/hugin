@@ -1,8 +1,6 @@
 import type Valkey from "iovalkey";
-import { Resource } from "sst";
 import { DynamoConnectionStorage } from "./dynamodb";
 import { RedisConnectionStorage } from "./redis";
-
 export type StorageType = "redis" | "dynamodb";
 
 export interface ConnectionStorage {
@@ -26,6 +24,10 @@ export interface ConnectionStorage {
 	): Promise<void>;
 	removeUserFromRoom(roomId: string, userId: string): Promise<void>;
 	getRoomMembers(roomId: string): Promise<string[]>;
+
+	// Logging operations - optional
+	enableVerboseLogging?(): void;
+	disableVerboseLogging?(): void;
 }
 
 export const CONNECTION_TTL_SECONDS = 600; // 10 minutes
@@ -53,8 +55,21 @@ export const CONNECTION_TTL_SECONDS = 600; // 10 minutes
 // 					},
 // 				},
 // 			);
+
 export class MeasuredConnectionStorage implements ConnectionStorage {
 	constructor(private storage: ConnectionStorage) {}
+
+	verboseLogging = false;
+
+	enableVerboseLogging() {
+		this.verboseLogging = true;
+		this.storage.enableVerboseLogging?.();
+	}
+
+	disableVerboseLogging() {
+		this.verboseLogging = false;
+		this.storage.disableVerboseLogging?.();
+	}
 
 	async refreshUserConnection(
 		userId: string,
@@ -64,14 +79,18 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		const start = process.hrtime.bigint();
 		await this.storage.refreshUserConnection(userId, token, connectionId);
 		const end = process.hrtime.bigint();
-		console.log(`refreshUserConnection took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`refreshUserConnection took ${(end - start) / 1_000_000n}ms`);
+		}
 	}
 
 	async getUserConnections(userId: string): Promise<string[]> {
 		const start = process.hrtime.bigint();
 		const result = await this.storage.getUserConnections(userId);
 		const end = process.hrtime.bigint();
-		console.log(`getUserConnections took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`getUserConnections took ${(end - start) / 1_000_000n}ms`);
+		}
 		return result;
 	}
 
@@ -81,7 +100,9 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		const start = process.hrtime.bigint();
 		const result = await this.storage.getConnectionData(connectionId);
 		const end = process.hrtime.bigint();
-		console.log(`getConnectionData took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`getConnectionData took ${(end - start) / 1_000_000n}ms`);
+		}
 		return result;
 	}
 
@@ -89,7 +110,9 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		const start = process.hrtime.bigint();
 		await this.storage.removeConnection(connectionId, userId);
 		const end = process.hrtime.bigint();
-		console.log(`removeConnection took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`removeConnection took ${(end - start) / 1_000_000n}ms`);
+		}
 	}
 
 	async addUserToRoom(
@@ -100,21 +123,27 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		const start = process.hrtime.bigint();
 		await this.storage.addUserToRoom(roomId, userId, connectionId);
 		const end = process.hrtime.bigint();
-		console.log(`addUserToRoom took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`addUserToRoom took ${(end - start) / 1_000_000n}ms`);
+		}
 	}
 
 	async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
 		const start = process.hrtime.bigint();
 		await this.storage.removeUserFromRoom(roomId, userId);
 		const end = process.hrtime.bigint();
-		console.log(`removeUserFromRoom took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`removeUserFromRoom took ${(end - start) / 1_000_000n}ms`);
+		}
 	}
 
 	async getRoomMembers(roomId: string): Promise<string[]> {
 		const start = process.hrtime.bigint();
 		const result = await this.storage.getRoomMembers(roomId);
 		const end = process.hrtime.bigint();
-		console.log(`getRoomMembers took ${(end - start) / 1_000_000n}ms`);
+		if (this.verboseLogging) {
+			console.log(`getRoomMembers took ${(end - start) / 1_000_000n}ms`);
+		}
 		return result;
 	}
 }
