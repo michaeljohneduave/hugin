@@ -30,7 +30,7 @@ const routerPrompt = `
 	If you can't help the user, say so.
 `;
 
-export async function streamRouter(messages: CoreMessage[]) {
+export async function llmStreamRouter(messages: CoreMessage[]) {
 	const response = await streamText({
 		model: bigModel,
 		maxSteps: 10,
@@ -43,7 +43,7 @@ export async function streamRouter(messages: CoreMessage[]) {
 	return response;
 }
 
-export async function router(messages: CoreMessage[]) {
+export async function llmTextRouter(messages: CoreMessage[]) {
 	return await generateText({
 		model: bigModel,
 		maxSteps: 10,

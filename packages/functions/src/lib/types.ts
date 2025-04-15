@@ -45,9 +45,11 @@ type MediaFiles = {
 // Payload has reached the server and has a messageId attached to it
 export type ChatPayload = ChatPayloadBase & {
 	messageId: MessageEntityType["messageId"];
+	threadId?: MessageEntityType["threadId"];
 	action: "message";
 	roomId: string;
 	type: Exclude<MessageEntityType["type"], "event">;
+	replyToMessageId?: string;
 } & XOR<
 		{
 			message: string;

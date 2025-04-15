@@ -1,4 +1,4 @@
-import { streamRouter } from "@hugin-bot/core/src/ai/router";
+import { llmStreamRouter } from "@hugin-bot/core/src/ai/router";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 import { type ResponseStream, streamifyResponse } from "lambda-stream";
 
@@ -10,7 +10,7 @@ async function handler(
 ) {
 	const { messages } = JSON.parse(_event.body || "");
 
-	const res = await streamRouter(messages);
+	const res = await llmStreamRouter(messages);
 	const readableStream = await res.toDataStream();
 	const reader = readableStream.getReader();
 	let continueReading = true;

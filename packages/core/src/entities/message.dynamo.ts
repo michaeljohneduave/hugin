@@ -20,6 +20,11 @@ export const MessageEntity = new Entity(
 				default: () => crypto.randomUUID(),
 				readOnly: true,
 			},
+			threadId: {
+				type: "string",
+				default: () => crypto.randomUUID(),
+				readOnly: true,
+			},
 			userId: {
 				type: "string",
 				required: true,
@@ -57,6 +62,9 @@ export const MessageEntity = new Entity(
 					type: "string",
 				},
 			},
+			replyToMessageId: {
+				type: "string",
+			},
 			// Event is for room metadata(?)
 			// could be people leaving and joining
 			type: {
@@ -70,12 +78,14 @@ export const MessageEntity = new Entity(
 			createdAt: {
 				type: "number",
 				default: () => Date.now(),
+				readOnly: true,
 			},
 			updatedAt: {
 				type: "number",
 				watch: "*",
 				default: () => Date.now(),
 				set: () => Date.now(),
+				readOnly: true,
 			},
 			deletedAt: {
 				type: "number",
@@ -113,6 +123,17 @@ export const MessageEntity = new Entity(
 				},
 				sk: {
 					field: "gsi2sk",
+					composite: ["createdAt"],
+				},
+			},
+			byThread: {
+				index: "gsi3",
+				pk: {
+					field: "gsi3pk",
+					composite: ["threadId"],
+				},
+				sk: {
+					field: "gsi3sk",
 					composite: ["createdAt"],
 				},
 			},

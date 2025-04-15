@@ -15,8 +15,38 @@ const props = defineProps<{
   availableBots: Bot[]
 }>();
 
+const emit = defineEmits<{
+  replyToMessage: [message: ChatPayloadWithUser];
+}>();
+
+// Add function to handle reply click
+const handleReply = () => {
+  emit('replyToMessage', props.message);
+};
+
+// Find the message being replied to, if any
+const repliedMessage = computed(() => {
+  if (!props.message.replyToMessageId) return null;
+  return props.messages.find(msg => msg.messageId === props.message.replyToMessageId);
+});
+
+// Check if this message is a reply
+const isReply = computed(() => {
+  return !!props.message.replyToMessageId;
+});
+
+// Check if this message has replies
+const hasReplies = computed(() => {
+  return props.messages.some(msg => msg.replyToMessageId === props.message.messageId);
+});
+
+// Get all replies to this message
+const messageReplies = computed(() => {
+  return props.messages.filter(msg => msg.replyToMessageId === props.message.messageId);
+});
+
 const isUser = computed(() => {
-  return props.message.type === "user" && props.currentUser.id === props.message.senderId;
+  return props.message.type === "user" && props.currentUser.id === props.message.userId;
 });
 
 // Check if this is the first message in a group from the same sender
@@ -25,7 +55,7 @@ const isFirstInGroup = computed(() => {
   const prevMessage = props.messages[props.index - 1];
 
   // Check if there's a timestamp break
-  const timeDiff = props.message.timestamp - prevMessage.timestamp;
+  const timeDiff = props.message.createdAt - prevMessage.createdAt;
   const minutes = timeDiff / (1000 * 60);
 
   // Consider it a new group if:
@@ -33,10 +63,10 @@ const isFirstInGroup = computed(() => {
   // - More than 2 hours gap
   // - Different day
   // - More than 15 minutes between messages
-  if (prevMessage.senderId !== props.message.senderId) return true;
+  if (prevMessage.userId !== props.message.userId) return true;
 
-  const prevDate = new Date(prevMessage.timestamp).toDateString();
-  const currentDate = new Date(props.message.timestamp).toDateString();
+  const prevDate = new Date(prevMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
   if (prevDate !== currentDate) return true;
 
   if (minutes > 120) return true; // 2 hour gap
@@ -49,7 +79,7 @@ const isLastInGroup = computed(() => {
   const nextMessage = props.messages[props.index + 1];
 
   // Check if there's a timestamp break
-  const timeDiff = nextMessage.timestamp - props.message.timestamp;
+  const timeDiff = nextMessage.createdAt - props.message.createdAt;
   const minutes = timeDiff / (1000 * 60);
 
   // Consider it the end of a group if:
@@ -57,10 +87,10 @@ const isLastInGroup = computed(() => {
   // - More than 2 hours until next message
   // - Different day
   // - More than 15 minutes between messages
-  if (nextMessage.senderId !== props.message.senderId) return true;
+  if (nextMessage.userId !== props.message.userId) return true;
 
-  const nextDate = new Date(nextMessage.timestamp).toDateString();
-  const currentDate = new Date(props.message.timestamp).toDateString();
+  const nextDate = new Date(nextMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
   if (nextDate !== currentDate) return true;
 
   if (minutes > 120) return true; // 2 hour gap
@@ -71,7 +101,7 @@ const isLastInGroup = computed(() => {
 const showTimestamp = computed(() => {
   if (props.index === 0) return true;
   const prevMessage = props.messages[props.index - 1];
-  const timeDiff = props.message.timestamp - prevMessage.timestamp;
+  const timeDiff = props.message.createdAt - prevMessage.createdAt;
 
   // Show timestamp if:
   // - More than 15 minutes between messages
@@ -80,8 +110,8 @@ const showTimestamp = computed(() => {
   const minutes = timeDiff / (1000 * 60);
   if (minutes > 120) return true; // Show after 2 hours gap
 
-  const prevDate = new Date(prevMessage.timestamp).toDateString();
-  const currentDate = new Date(props.message.timestamp).toDateString();
+  const prevDate = new Date(prevMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
   if (prevDate !== currentDate) return true;
 
   return minutes > 15; // Show every 15 minutes
@@ -297,7 +327,7 @@ onMounted(() => {
     <!-- Timestamp separator -->
     <div v-if="showTimestamp" class="flex justify-center w-full my-2">
       <div class="px-3 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
-        {{ formatRelativeTime(message.timestamp) }}
+        {{ formatRelativeTime(message.createdAt) }}
       </div>
     </div>
 
@@ -306,12 +336,12 @@ onMounted(() => {
       isUser ? 'mr-2' : 'ml-2'
     ]">
       <span class="text-xs text-gray-500 dark:text-gray-400">
-        {{ message.user?.name || message.senderId }}
+        {{ message.user?.name || message.userId }}
       </span>
     </div>
 
     <!-- Message bubble row -->
-    <div class="flex items-end gap-2" :class="[
+    <div class="flex items-end gap-2 group" :class="[
       isUser ? 'flex-row-reverse' : 'flex-row',
       isUser ? 'mr-2' : 'ml-2'
     ]">
@@ -326,7 +356,7 @@ onMounted(() => {
       </div>
 
       <!-- Message content -->
-      <div class="max-w-[85vw] sm:max-w-[75vw] md:max-w-[65vw] lg:max-w-3xl rounded-lg px-2 py-1 group relative" :class="[
+      <div class="max-w-[75vw] sm:max-w-[75vw] md:max-w-[65vw] lg:max-w-3xl rounded-lg px-2 py-1 relative" :class="[
         isUser
           ? 'bg-primary text-primary-foreground'
           : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
@@ -334,14 +364,36 @@ onMounted(() => {
         isFirstInGroup ? 'rounded-lg' : '',
         !isFirstInGroup ? 'rounded-lg' : '',
         !isLastInGroup ? (isUser ? 'rounded-br-md' : 'rounded-bl-md') : ''
-      ]" :title="new Date(message.timestamp).toLocaleString([], {
+      ]" :title="new Date(message.createdAt).toLocaleString([], {
         hour: 'numeric',
         minute: '2-digit',
         hour12: true,
         month: 'short',
         day: 'numeric',
-        year: new Date(message.timestamp).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        year: new Date(message.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
       })">
+        <!-- Replied message preview -->
+        <div v-if="repliedMessage" class="px-2 py-1 mb-1 text-xs border-l-2 rounded bg-gray-100/50 dark:bg-gray-700/50"
+          :class="isUser ? 'border-primary-foreground/50' : 'border-primary/50'">
+          <div class="flex items-center gap-1">
+            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="9 14 4 9 9 4"></polyline>
+              <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+            </svg>
+            <span class="font-medium" :class="isUser ? 'text-primary-foreground/80' : 'text-primary/80'">
+              {{ repliedMessage.user?.name ?? repliedMessage.userId }}
+            </span>
+          </div>
+          <div class="truncate mt-0.5"
+            :class="isUser ? 'text-primary-foreground/70' : 'text-gray-600 dark:text-gray-300'">
+            {{ repliedMessage.message ||
+              (repliedMessage.imageFiles?.length ? '📷 Image' :
+                repliedMessage.videoFiles?.length ? '🎥 Video' :
+                  repliedMessage.audioFiles?.length ? '🔊 Audio' : '') }}
+          </div>
+        </div>
+
         <!-- Message text -->
         <div v-if="message.message" class="text break-words prose dark:prose-invert max-w-none prose-sm"
           v-html="renderContent"></div>
@@ -352,37 +404,27 @@ onMounted(() => {
             <img :src="image" class="max-w-[300px] max-h-[300px] object-contain rounded-lg" loading="lazy" />
           </div>
         </div>
-
-        <!-- Video files -->
-        <!-- <div v-if="message.videoFiles && message.videoFiles.length > 0" class="space-y-2">
-          <div v-for="(video, index) in message.videoFiles" :key="index" class="rounded-lg overflow-hidden">
-            <video controls preload="metadata" class="max-w-[300px] max-h-[300px] rounded-lg bg-black"
-              :poster="video.thumbnail">
-              <source :src="video.url" :type="video.type">
-              Your browser does not support the video tag.
-            </video>
-          </div>
-        </div> -->
-
-        <!-- Audio files -->
-        <!-- <div v-if="message.audioFiles && message.audioFiles.length > 0" class="space-y-2">
-          <div v-for="(audio, index) in message.audioFiles" :key="index"
-            class="flex items-center p-2 bg-gray-100 dark:bg-gray-700 rounded-lg">
-            <audio controls preload="metadata" class="w-full h-8">
-              <source :src="audio.url" :type="audio.type">
-              Your browser does not support the audio element.
-            </audio>
-          </div>
-        </div> -->
-
-        <!-- File attachment -->
-        <!-- <div v-if="message.attachment" class="mt-1.5 p-2 bg-gray-100 dark:bg-gray-700 rounded flex items-center">
-          <FileIcon class="h-4 w-4 mr-2" />
-          <span class="text-sm truncate flex-1">{{ message.attachment.name }}</span>
-          <button class="text-primary text-sm">Download</button>
-        </div> -->
       </div>
+
+      <!-- Reply button (on the right for non-user messages, left for user messages) -->
+      <button @click.prevent="handleReply"
+        class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+                         hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 14 4 9 9 4"></polyline>
+          <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+        </svg>
+      </button>
     </div>
+
+    <!-- Replies to this message -->
+    <!-- <div v-if="hasReplies" class="ml-8 mt-2 space-y-2 border-l-2 pl-2"
+      :class="isUser ? 'border-primary-foreground/20' : 'border-primary/20'">
+      <Message v-for="reply in messageReplies" :key="reply.messageId" :message="reply" :index="messages.indexOf(reply)"
+        :current-user="currentUser" :messages="messages" :available-bots="availableBots"
+        @reply-to-message="emit('replyToMessage', $event)" />
+    </div> -->
   </div>
 </template>
 

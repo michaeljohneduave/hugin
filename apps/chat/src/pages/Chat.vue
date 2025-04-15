@@ -7,6 +7,7 @@ import Sidebar from "@/components/Sidebar.vue"
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
+import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
 import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
 import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/lib/types";
 import {
@@ -24,7 +25,7 @@ import { useTheme } from '../composables/useTheme';
 import type { User } from "../services/auth";
 
 // Both for regular user and bot
-export type ChatPayloadWithUser = ChatPayload & {
+export type ChatPayloadWithUser = MessageEntityType & {
 	user: User
 }
 
@@ -72,6 +73,13 @@ const showMentionSuggestions = ref(false);
 const rooms = ref<RouterOutput["roomsWithLastMessage"]>([]);
 const roomMembers = ref<Record<string, RouterOutput["roomMembers"][number]>>({});
 const showNotificationSettings = ref(false);
+const replyToMessage = ref<ChatPayloadWithUser | null>(null);
+
+const isMobileMenuOpen = ref(false);
+const isSidebarOpen = ref(false);
+const showUserMenu = ref(false);
+const viewportHeight = ref(window.innerHeight);
+const isKeyboardOpen = ref(false);
 
 // Transform rooms data to match Chat type
 const formattedRooms = computed(() => {
@@ -123,18 +131,6 @@ const fetchRoomMembers = async (roomId: string) => {
 	} catch (error) {
 		console.error('Error fetching room members:', error);
 	}
-};
-
-// Modify handleChatSelect to handle WebSocket room changes
-const handleChatSelect = async (chatId: string) => {
-	currentChatId.value = chatId;
-	// Fetch room members first
-	await fetchRoomMembers(chatId);
-	// Join new room
-	// websocket.value?.send(JSON.stringify({
-	// 	action: 'joinRoom',
-	// 	roomId: chatId,
-	// }));
 };
 
 // Add isScrolledToBottom ref
@@ -196,19 +192,16 @@ const fetchMessages = async (roomId: string) => {
 		const messages = await trpc.messagesByRoom.query({
 			roomId,
 		});
+		// TODOS: Clean up this transformation
 		// Transform messages to match ChatPayload type
-		chatMessages.value = messages.map(msg => {
-			if (msg.type === "event") {
-				return null;
-			}
-
+		chatMessages.value = messages.filter(msg => msg.type !== "event").map(msg => {
 			if (msg.type === "llm") {
 				return {
 					messageId: msg.messageId,
 					action: "message" as const,
-					senderId: msg.userId,
+					userId: msg.userId,
 					roomId: currentChatId.value,
-					timestamp: new Date(msg.createdAt).getTime(),
+					createdAt: msg.createdAt,
 					type: "llm" as const,
 					...(msg.message ? { message: msg.message } : {
 						imageFiles: msg.imageFiles || [],
@@ -216,6 +209,8 @@ const fetchMessages = async (roomId: string) => {
 						audioFiles: msg.audioFiles || []
 					}),
 					user: availableBots.find(bot => bot.id === msg.userId) || unknownBot,
+					replyToMessageId: msg.replyToMessageId,
+					threadId: msg.threadId,
 				}
 			}
 
@@ -224,9 +219,9 @@ const fetchMessages = async (roomId: string) => {
 			return {
 				messageId: msg.messageId,
 				action: "message" as const,
-				senderId: msg.userId,
+				userId: msg.userId,
 				roomId: currentChatId.value,
-				timestamp: new Date(msg.createdAt).getTime(),
+				createdAt: msg.createdAt,
 				type: "user" as const,
 				...(msg.message ? { message: msg.message } : {
 					imageFiles: msg.imageFiles || [],
@@ -234,8 +229,10 @@ const fetchMessages = async (roomId: string) => {
 					audioFiles: msg.audioFiles || []
 				}),
 				user: user,
+				replyToMessageId: msg.replyToMessageId,
+				threadId: msg.threadId,
 			}
-		}).filter(msg => msg !== null);
+		})
 
 		roomEvents.value = messages.filter(msg => msg.type === "event").map(msg => ({
 			action: msg.action as "joinRoom" | "leaveRoom",
@@ -301,7 +298,7 @@ watch(chatMessages, (newMessages, oldMessages) => {
 	if (newMessages.length > oldMessages.length) {
 		// Force scroll on user's own messages
 		const lastMessage = newMessages[newMessages.length - 1];
-		const isOwnMessage = lastMessage.senderId === currentUser.value?.id;
+		const isOwnMessage = lastMessage.userId === currentUser.value?.id;
 		scrollToBottom(isOwnMessage);
 	}
 }, { deep: true });
@@ -311,31 +308,32 @@ watch(currentChatId, (newRoomId) => {
 	fetchMessages(newRoomId);
 });
 
-// Watch for WebSocket messages to update room members
+// When receiving a message, handle it based on type
 const handleWebSocketMessage = (event: MessageEvent) => {
-	const data = JSON.parse(event.data) as ChatPayload | RoomPayload;
-	console.log("data", data);
-	if (data.action === 'message') {
+	const data = JSON.parse(event.data) as MessageEntityType | RoomPayload;
+	console.log("data", data, roomMembers.value);
 
-		switch (data.type) {
+	if (data.action === 'message') {
+		const messageData = data;
+		switch (messageData.type) {
 			case "llm":
 				chatMessages.value.push({
-					...data,
-					user: availableBots.find(bot => bot.id === data.senderId) || unknownBot,
+					...messageData,
+					user: availableBots.find(bot => bot.id === messageData.userId) || unknownBot,
 				});
-
 				break;
 			case "user":
 				chatMessages.value.push({
-					...data,
-					user: roomMembers.value[data.senderId],
-				})
+					...messageData,
+					user: roomMembers.value[messageData.userId],
+				});
 				break;
 		}
-
 		scrollToBottom();
 	} else if (data.action === "joinRoom" || data.action === "leaveRoom") {
-		roomEvents.value.push(data);
+		const eventData = data as RoomPayload;
+		roomEvents.value.push(eventData);
+		scrollToBottom();
 	}
 };
 
@@ -367,121 +365,6 @@ onUnmounted(() => {
 	removeMessageHandler(handleWebSocketMessage);
 	messagesContainer.value?.removeEventListener('scroll', handleScroll);
 });
-
-// Format date for messages
-const formatDate = (timestamp: Date) => {
-	const now = new Date();
-	const date = new Date(timestamp);
-
-	if (date.toDateString() === now.toDateString()) {
-		return "Today";
-	}
-
-	if (
-		date.toDateString() ===
-		new Date(now.setDate(now.getDate() - 1)).toDateString()
-	) {
-		return "Yesterday";
-	}
-
-	return date.toLocaleDateString(undefined, {
-		weekday: "long",
-		month: "short",
-		day: "numeric",
-	});
-};
-
-// Format time for messages
-const formatTime = (timestamp: Date) => {
-	return new Date(timestamp).toLocaleTimeString([], {
-		hour: "2-digit",
-		minute: "2-digit",
-	});
-};
-
-
-
-// Toggle attachment menu
-const toggleAttachmentMenu = () => {
-	showAttachmentMenu.value = !showAttachmentMenu.value;
-};
-
-// Start audio recording
-const startRecording = async () => {
-	try {
-		const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-		const mediaRecorder = new MediaRecorder(stream);
-		const audioChunks: BlobPart[] = [];
-
-		mediaRecorder.addEventListener("dataavailable", (event) => {
-			audioChunks.push(event.data);
-		});
-
-		mediaRecorder.addEventListener("stop", () => {
-			const audioBlob = new Blob(audioChunks, { type: "audio/mpeg" });
-			audioRecording.value = URL.createObjectURL(audioBlob);
-			for (const track of stream.getTracks()) {
-				track.stop();
-			}
-		});
-
-		mediaRecorder.start();
-		isRecording.value = true;
-		showAttachmentMenu.value = false;
-
-		// Start recording timer
-		recordingTime.value = 0;
-		recordingInterval.value = setInterval(() => {
-			recordingTime.value++;
-		}, 1000);
-
-		// Store mediaRecorder in a ref for later access
-		window.mediaRecorder = mediaRecorder;
-	} catch (error) {
-		console.error("Error accessing microphone:", error);
-		alert("Could not access microphone. Please check permissions.");
-	}
-};
-
-// Stop audio recording
-const stopRecording = () => {
-	if (window.mediaRecorder && window.mediaRecorder.state !== "inactive") {
-		window.mediaRecorder.stop();
-
-		if (recordingInterval.value) {
-			clearInterval(recordingInterval.value);
-		}
-		isRecording.value = false;
-	}
-};
-
-// Cancel audio recording
-const cancelRecording = () => {
-	if (window.mediaRecorder && window.mediaRecorder.state !== "inactive") {
-		window.mediaRecorder.stop();
-
-		if (recordingInterval.value) {
-			clearInterval(recordingInterval.value);
-		}
-
-		isRecording.value = false;
-		audioRecording.value = null;
-	}
-};
-
-// Remove audio recording
-const removeAudio = () => {
-	audioRecording.value = null;
-};
-
-// Auto-resize textarea
-const autoResize = () => {
-	const textarea = textareaRef.value;
-	if (!textarea) return;
-
-	textarea.style.height = "auto";
-	textarea.style.height = `${textarea.scrollHeight}px`;
-};
 
 // Check for @mentions
 watch(messageInput, (newValue) => {
@@ -552,11 +435,6 @@ const handleLogout = async () => {
 };
 
 // Add with other refs
-const isMobileMenuOpen = ref(false);
-const isSidebarOpen = ref(false);
-const showUserMenu = ref(false);
-const viewportHeight = ref(window.innerHeight);
-const isKeyboardOpen = ref(false);
 
 // Add to script section with other onMounted hooks
 onMounted(() => {
@@ -589,47 +467,6 @@ onUnmounted(() => {
 	window.removeEventListener('scroll', () => { });
 });
 
-// Add to script section with other refs
-const showEmojiPicker = ref(false);
-const showGifPicker = ref(false);
-
-// Update the emoji interface and handler
-interface EmojiData {
-	i: string;  // emoji character
-	n: string[]; // names
-	r: string;   // representation
-	u: string;   // unicode
-}
-
-const insertEmoji = (emoji: EmojiData) => {
-	messageInput.value += emoji.i;
-	showEmojiPicker.value = false;
-};
-
-// Update the insertGif function
-// const selectAndSendGif = (url: string) => {
-// 	// How do I centralize checking or making sure session.user exists
-// 	if (!session.value?.user) {
-// 		return;
-// 	}
-
-// 	const message: MessagePayload = {
-// 		action: 'sendMessage',
-// 		senderId: session.value?.user.id,
-// 		roomId: currentChatId.value,
-// 		timestamp: Date.now(),
-// 		imageFiles: [url]
-// 	};
-
-// 	showGifPicker.value = false;
-// 	sendSocketMsg(message);
-// };
-
-// Update the handleAudioStop function
-const handleAudioStop = (audioUrl: string) => {
-	audioRecording.value = audioUrl;
-};
-
 // Function to update room members
 const updateRoomMembers = (members: RouterOutput["roomMembers"]) => {
 	const updatedMembers: Record<string, RouterOutput["roomMembers"][number]> = {};
@@ -639,32 +476,31 @@ const updateRoomMembers = (members: RouterOutput["roomMembers"]) => {
 	roomMembers.value = updatedMembers;
 };
 
-// Add createNewAiChat handler
-const handleCreateNewAiChat = async () => {
-	if (!currentUser.value) return;
-
-	try {
-		// Create a new room with type 'llm'
-		const newRoom = await trpc.createAiRoom.mutate({
-			type: 'llm',
-			name: 'New Chat', // Default name
-			userId: currentUser.value.id,
-		});
-
-		// Add the new room to the rooms list
-		rooms.value = [{
-			...newRoom,
-		}, ...rooms.value];
-
-		// Switch to the new room
-		currentChatId.value = newRoom.roomId;
-		await fetchRoomMembers(newRoom.roomId);
-		await fetchMessages(newRoom.roomId);
-	} catch (error) {
-		console.error('Error creating new AI chat:', error);
-	}
+// Handle message reply
+const handleReplyToMessage = (message: ChatPayloadWithUser) => {
+	replyToMessage.value = message;
+	// Focus the message input
+	nextTick(() => {
+		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+		if (textarea) textarea.focus();
+	});
 };
 
+// Cancel a reply
+const cancelReply = () => {
+	replyToMessage.value = null;
+};
+
+// When sending a message, include the replyToMessageId if replying
+const handleSendMessage = (message: ChatPayload) => {
+	if (replyToMessage.value) {
+		message.replyToMessageId = replyToMessage.value.messageId;
+		message.threadId = replyToMessage.value.threadId;
+		replyToMessage.value = null;
+	}
+
+	sendSocketMsg(message);
+};
 
 </script>
 
@@ -675,7 +511,7 @@ const handleCreateNewAiChat = async () => {
 	<div v-else-if="authError" class="flex h-screen items-center justify-center">
 		<div class="text-red-500">Error: {{ authError.message }}</div>
 	</div>
-	<div v-else class="flex h-[var(--vh,100vh)] bg-gray-100 dark:bg-gray-900">
+	<div v-else class="h-[var(--vh,100vh)] bg-gray-100 dark:bg-gray-900">
 		<!-- Sidebar -->
 		<div class="fixed inset-0 z-40 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out"
 			:class="[isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full']">
@@ -689,9 +525,10 @@ const handleCreateNewAiChat = async () => {
 		</div>
 
 		<!-- Main content -->
-		<div class="flex-1 flex flex-col">
+		<div class="flex-1 flex flex-col h-[var(--vh,100vh)]">
 			<!-- Chat header -->
-			<div class="h-16 flex items-center justify-between px-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
+			<div
+				class="flex-shrink-0 h-16 flex items-center justify-between px-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
 				<!-- <div class="flex items-center">
 					<button class="md:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
 						@click="isMobileMenuOpen = !isMobileMenuOpen">
@@ -749,18 +586,35 @@ const handleCreateNewAiChat = async () => {
 				</div>
 			</div>
 
-			<!-- Messages container -->
-			<div ref="messagesContainer" class="flex-1 overflow-y-auto px-2 sm:px-4 py-4">
+			<!-- Messages area -->
+			<div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
+				<!-- Show loading or no messages state -->
+				<div v-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
+					<div class="text-center text-gray-500 dark:text-gray-400">
+						<p class="text-lg">No messages yet</p>
+						<p class="text-sm">Send a message to start the conversation</p>
+					</div>
+				</div>
+
+				<!-- Message list -->
 				<template v-for="(message, index) in chatMessages" :key="message.messageId">
-					<Message v-if="currentUser" :message="message" :index="index" :messages="chatMessages"
-						:currentUser="currentUser" :availableBots="availableBots" />
-					<RoomEvent v-else :event="message" :index="index" :messages="chatMessages" />
+					<Message v-if="message.type === 'llm' || message.type === 'user'" :message="message" :index="index"
+						:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
+						@reply-to-message="handleReplyToMessage" />
+				</template>
+
+				<!-- Room events -->
+				<template v-for="event in roomEvents" :key="event.messageId">
+					<RoomEvent :event="event" :members="roomMembers" :currentUserId="currentUser?.id" />
 				</template>
 			</div>
 
 			<!-- Input area -->
-			<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :availableBots="availableBots"
-				:isDarkMode="isDarkMode" @sendMessage="sendSocketMsg" />
+			<div class="flex-shrink-0">
+				<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :availableBots="availableBots"
+					:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
+					@cancelReply="cancelReply" />
+			</div>
 		</div>
 	</div>
 </template>

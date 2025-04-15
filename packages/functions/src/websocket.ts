@@ -5,11 +5,14 @@ import {
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { verifyToken as clerkVerifyToken } from "@clerk/backend";
 import { decodeJwt } from "@clerk/backend/jwt";
-import { router } from "@hugin-bot/core/src/ai/router";
-import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
+import { llmTextRouter } from "@hugin-bot/core/src/ai/router";
+import {
+	MessageEntity,
+	type MessageEntityType,
+} from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
+import type { CoreMessage } from "ai";
 import type { APIGatewayProxyEvent } from "aws-lambda";
-import Valkey, { type Redis } from "iovalkey";
 import { Resource } from "sst";
 import {
 	type ConnectionStorage,
@@ -26,10 +29,8 @@ const apiClient = new ApiGatewayManagementApiClient({
 	maxAttempts: 0,
 });
 
-const connectionStorage: ConnectionStorage = createConnectionStorage(
-	"dynamodb",
-	// redis as Redis,
-);
+const connectionStorage: ConnectionStorage =
+	createConnectionStorage("dynamodb");
 
 // Handles rejoining existing rooms (user becoming online)
 export const connect = async (event: APIGatewayProxyEvent) => {
@@ -230,7 +231,10 @@ export const pong = (conn: string) => {
 	);
 };
 
-async function multiSendMsg(message: ChatPayload, connectionIds: string[]) {
+async function multiSendMsg(
+	message: ChatPayload | MessageEntityType,
+	connectionIds: string[],
+) {
 	await Promise.allSettled(
 		connectionIds.map((conn) =>
 			apiClient
@@ -259,51 +263,75 @@ async function multiSendMsg(message: ChatPayload, connectionIds: string[]) {
 	);
 }
 
-async function getLLMResponse({
-	roomId,
-	message,
+// TODO: Add llm errors as a message entity
+async function generateLLMResponse({
 	connectionIds,
+	message,
 }: {
-	roomId: string;
-	message: string;
+	message: MessageEntityType;
 	connectionIds: string[];
 }) {
-	const response = await router([
-		{
-			role: "user",
-			content: message,
-		},
-	]);
-	const text = response.text;
+	if (!message.threadId) {
+		console.error("Called generateLLMResponse with no threadId");
+		return;
+	}
+
+	const messages = await MessageEntity.query
+		.byThread({
+			threadId: message.threadId,
+		})
+		.go();
+
+	const threadMessages = messages.data.map((message) => ({
+		role: message.type === "user" ? "user" : "assistant",
+		content: message.message || "",
+	})) as CoreMessage[];
+
+	console.log("threadMessages", threadMessages);
+
+	const { response, error } = await llmTextRouter([...threadMessages])
+		.then((res) => ({
+			response: res,
+			error: null,
+		}))
+		.catch((err) => ({
+			response: null,
+			error: err,
+		}));
+
+	let text = "";
+
+	if (error) {
+		console.error("Error generating LLM response", error);
+
+		text = error.message;
+
+		if (!process.env.SST_DEV) {
+			text =
+				"An error occurred while generating the response. Please try again.";
+		}
+	} else if (response) {
+		text = response.text;
+	}
+
 	const senderId = "gemini";
 
-	console.log("response", response);
+	console.log("response", response, error);
 
-	const chatPayload: ChatPayload = {
-		messageId: crypto.randomUUID(),
-		action: "message",
-		senderId,
-		roomId,
-		timestamp: Date.now(),
-		mentions: [senderId],
-		message: text,
-		type: "llm",
-	};
-
-	MessageEntity.create({
+	const llmMessage = await MessageEntity.create({
 		userId: senderId,
 		action: "message",
 		message: text,
-		roomId: roomId,
+		roomId: message.roomId,
 		type: "llm",
-	})
-		.go()
-		.catch(console.error);
+		replyToMessageId: message.messageId,
+		threadId: message.threadId,
+		mentions: [senderId],
+	}).go();
 
-	await multiSendMsg(chatPayload, connectionIds);
+	await multiSendMsg(llmMessage.data, connectionIds);
 }
 
-// TODO: Need to separate the endpoint for DMs and rooms
 export const sendMessage = async (
 	payload: ChatPayload,
 	connectionId: string,
@@ -322,48 +350,50 @@ export const sendMessage = async (
 	);
 
 	const messageId = crypto.randomUUID();
-
-	MessageEntity.create({
+	// Note: For now we are waiting for the message to be created before sending it to the client
+	// This might be slower than sending the message immediately
+	// TODO: Measure the performance of this
+	const message = await MessageEntity.create({
 		messageId,
-		action: "message",
+		action: "message" as const,
 		userId: payload.senderId,
 		message: payload.message,
 		imageFiles: payload.imageFiles,
 		audioFiles: payload.audioFiles,
 		videoFiles: payload.videoFiles,
 		roomId: payload.roomId,
-		type: "user",
-	})
-		.go()
-		.catch(console.error);
+		type: "user" as const,
+		replyToMessageId: payload.replyToMessageId,
+		mentions: payload.mentions,
+		// For now, we trust the frontend to send the correct threadId/replyToMessageId
+		threadId: payload.threadId,
+	}).go();
 
 	const allConnectionIds = connectionIds.flat();
 
-	const message: ChatPayload = {
-		messageId,
-		action: "message",
-		senderId: jwtPayload.payload.sub,
-		roomId: payload.roomId,
-		timestamp: Date.now(),
-		type: "user",
-		...(payload.message
-			? { message: payload.message, mentions: payload.mentions }
-			: {
-					imageFiles: payload.imageFiles || [],
-					videoFiles: payload.videoFiles || [],
-					audioFiles: payload.audioFiles || [],
-				}),
-	};
-
-	await multiSendMsg(message, allConnectionIds);
+	await multiSendMsg(message.data, allConnectionIds);
 
 	// if llm tag is detected send the message to the router function
-	if (payload.mentions && message.message) {
-		await getLLMResponse({
-			roomId: payload.roomId,
-			message: payload.message,
+	if (payload.mentions) {
+		// TODO: Check mention for llm tag
+		await generateLLMResponse({
+			message: message.data,
 			connectionIds: allConnectionIds,
 		});
+		// if the message is a reply to a llm message, send the message to the router function
+	} else if (payload.replyToMessageId) {
+		const message = await MessageEntity.query
+			.primary({
+				messageId: payload.replyToMessageId,
+			})
+			.go();
+
+		if (message.data[0].type === "llm") {
+			await generateLLMResponse({
+				message: message.data[0],
+				connectionIds: allConnectionIds,
+			});
+		}
 	}
 };
 

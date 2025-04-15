@@ -2,7 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
-import type { Bot } from '@/pages/Chat.vue';
+import type { Bot, ChatPayloadWithUser } from '@/pages/Chat.vue';
 import type { ChatPayload } from "@hugin-bot/functions/src/lib/types";
 import {
   File as FileIcon,
@@ -19,10 +19,12 @@ const props = defineProps<{
   currentChatId: string;
   availableBots: Bot[];
   isDarkMode: boolean;
+  replyTo?: ChatPayloadWithUser | null;
 }>();
 
 const emit = defineEmits<{
   sendMessage: [message: ChatPayload];
+  cancelReply: [];
 }>();
 
 // Input state
@@ -276,6 +278,32 @@ onUnmounted(() => {
         <FilePreview v-if="selectedVideoFile" :fileName="selectedVideoFile.name" @remove="removeFile('video')" />
         <FilePreview v-if="selectedAudioFile || audioRecording" :fileName="selectedAudioFile?.name || 'Recording'"
           @remove="removeFile('audio')" />
+      </div>
+
+      <!-- Reply preview -->
+      <div v-if="props.replyTo" class="flex items-center bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
+        <div class="flex-1 flex items-center min-w-0">
+          <div class="w-1 h-full bg-primary mr-2 flex-shrink-0"></div>
+          <div class="flex-1 min-w-0">
+            <div class="text-xs font-medium truncate">
+              Replying to {{ props.replyTo.user?.name ?? props.replyTo.userId }}
+            </div>
+            <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
+              {{ props.replyTo.message ||
+                (props.replyTo.imageFiles?.length ? '📷 Image' :
+                  props.replyTo.videoFiles?.length ? '🎥 Video' :
+                    props.replyTo.audioFiles?.length ? '🔊 Audio' : '') }}
+            </div>
+          </div>
+        </div>
+        <button type="button" @click="emit('cancelReply')"
+          class="flex-shrink-0 ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
       </div>
 
       <!-- Input with attachments row -->
