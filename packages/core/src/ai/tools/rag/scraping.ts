@@ -3,7 +3,7 @@ import getSitemap from "@hugin-bot/functions/src/lib/puppeteer/utils/getSitemap"
 import { tool } from "ai";
 import { Resource } from "sst";
 import { z } from "zod";
-import { storePriorityUrls } from "../libs";
+import { storePriorityUrls } from "../../libs";
 
 export const scrapeUrl = tool({
 	description: `

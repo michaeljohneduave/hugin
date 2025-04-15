@@ -1,7 +1,11 @@
 import { type CoreMessage, generateText, streamText, tool } from "ai";
 import { bigModel } from "./config";
-import { queryVectorDb, searchUrlInDb, transformQuery } from "./tools/query";
-import { scrapeUrl, scrapingTaskStatus } from "./tools/scraping";
+import {
+	queryVectorDb,
+	searchUrlInDb,
+	transformQuery,
+} from "./tools/rag/query";
+import { scrapeUrl, scrapingTaskStatus } from "./tools/rag/scraping";
 
 const toolset = {
 	queryVectorDb,

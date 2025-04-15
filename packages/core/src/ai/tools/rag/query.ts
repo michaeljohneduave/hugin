@@ -1,11 +1,11 @@
 import { tool } from "ai";
 import { and, cosineDistance, desc, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "../../drizzle";
-import { Contents } from "../../entities/content.sql";
-import { Urls } from "../../entities/url.sql";
-import { generateEmbeddings } from "../libs";
-import { transformToKeywords } from "../prompts";
+import { db } from "../../../drizzle";
+import { Contents } from "../../../entities/content.sql";
+import { Urls } from "../../../entities/url.sql";
+import { generateEmbeddings } from "../../libs";
+import { transformToKeywords } from "../../prompts";
 
 export const searchUrlInDb = tool({
 	description: `
