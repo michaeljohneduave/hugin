@@ -1,7 +1,7 @@
 import type {
 	MessagePayload,
 	RoomPayload,
-} from "@hugin-bot/functions/src/types";
+} from "@hugin-bot/functions/src/lib/types";
 import { type Ref, ref } from "vue";
 
 export interface WebSocketClient {
