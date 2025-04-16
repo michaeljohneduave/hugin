@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
+import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
 import {
   Bot,
   LogOut as LogOutIcon,

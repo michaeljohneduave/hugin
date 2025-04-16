@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { RouterOutput } from "@hugin-bot/functions/src/trpc";
+import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
 import { Bot, Hash, MessageSquare } from "lucide-vue-next";
 import { ref } from "vue";
 
