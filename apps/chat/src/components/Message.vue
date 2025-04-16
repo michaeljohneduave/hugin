@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Bot, ChatPayloadWithUser } from "@/pages/Chat.vue";
 import DOMPurify from 'isomorphic-dompurify';
+import { marked } from 'marked';
 import Prism from "prismjs"
 import { computed, onMounted } from 'vue';
 import type { User } from '../services/auth';
@@ -273,10 +274,29 @@ const renderContent = computed(() => {
   // First sanitize the input
   const sanitizedInput = DOMPurify.sanitize(props.message.message);
 
-  // Parse the content into parts (text and code blocks)
-  const parts = parseCodeBlocks(sanitizedInput);
+  // For LLM responses, use markdown rendering
+  if (props.message.type === 'llm') {
+    // Parse the content into parts (text and code blocks)
+    const parts = parseCodeBlocks(sanitizedInput);
 
-  // Convert parts to HTML
+    // Convert parts to HTML
+    const html = parts.map(part => {
+      if (part.type === 'code' && part.language) {
+        return createCodeBlockHtml(part.content, part.language);
+      }
+      // For text parts, render as markdown
+      return marked(part.content, {
+        breaks: true, // Enable line breaks
+        gfm: true, // Enable GitHub Flavored Markdown
+      });
+    }).join('');
+
+    // Final sanitization of the generated HTML
+    return DOMPurify.sanitize(html);
+  }
+
+  // For user messages, keep existing behavior
+  const parts = parseCodeBlocks(sanitizedInput);
   const html = parts.map(part => {
     if (part.type === 'code' && part.language) {
       return createCodeBlockHtml(part.content, part.language);
