@@ -1,5 +1,5 @@
 import { MessageTable, Postgres } from "./database";
-import { domain, chatSiteDomain } from "./dns";
+import { domain } from "./dns";
 import { puppeteerFn } from "./puppeteer";
 import {
 	CLERK_SECRET_KEY,
