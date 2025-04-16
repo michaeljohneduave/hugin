@@ -3,7 +3,7 @@ import type { Bot, ChatPayloadWithUser } from "@/pages/Chat.vue";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import type { User } from '../services/auth';
 
 import '@/lib/prism';
@@ -335,6 +335,50 @@ onMounted(() => {
   });
 });
 
+// Add touch handling state
+const touchStartX = ref(0);
+const touchCurrentX = ref(0);
+const isSliding = ref(false);
+const slideThreshold = 80; // pixels needed to trigger reply
+
+// Computed for slide transform
+const slideTransform = computed(() => {
+  if (!isSliding.value) return '';
+  const diff = Math.max(0, Math.min(touchCurrentX.value - touchStartX.value, slideThreshold));
+  return `translateX(${diff}px)`;
+});
+
+// Touch event handlers
+const handleTouchStart = (event: TouchEvent) => {
+  touchStartX.value = event.touches[0].clientX;
+  isSliding.value = true;
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (!isSliding.value) return;
+  touchCurrentX.value = event.touches[0].clientX;
+
+  // Prevent scrolling if we're sliding horizontally
+  const diff = touchCurrentX.value - touchStartX.value;
+  if (diff > 10) {
+    // event.preventDefault();
+  }
+};
+
+const handleTouchEnd = () => {
+  if (!isSliding.value) return;
+
+  const diff = touchCurrentX.value - touchStartX.value;
+  if (diff >= slideThreshold) {
+    emit('replyToMessage', props.message);
+  }
+
+  // Reset state
+  isSliding.value = false;
+  touchStartX.value = 0;
+  touchCurrentX.value = 0;
+};
+
 </script>
 <template>
   <!-- Message -->
@@ -361,10 +405,24 @@ onMounted(() => {
     </div>
 
     <!-- Message bubble row -->
-    <div class="flex items-end gap-2 group" :class="[
+    <div class="flex items-end gap-2 group relative" :class="[
       isUser ? 'flex-row-reverse' : 'flex-row',
       isUser ? 'mr-2' : 'ml-2'
-    ]">
+    ]" @touchstart="handleTouchStart" @touchmove.passive="handleTouchMove" @touchend="handleTouchEnd"
+      @touchcancel="handleTouchEnd">
+
+      <!-- Slide-to-reply indicator -->
+      <div class="absolute inset-y-0 left-0 flex items-center pointer-events-none transition-opacity" :class="[
+        isSliding ? 'opacity-100' : 'opacity-0',
+        touchCurrentX - touchStartX >= slideThreshold ? 'text-primary' : 'text-gray-400'
+      ]">
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 14 4 9 9 4"></polyline>
+          <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+        </svg>
+      </div>
+
       <!-- Avatar space (always present to maintain alignment) -->
       <div v-if="!isUser" class="flex-shrink-0 w-6">
         <!-- Show avatar for last message in group or after timestamp break -->
@@ -375,23 +433,25 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Message content -->
-      <div class="max-w-[75vw] sm:max-w-[75vw] md:max-w-[65vw] lg:max-w-3xl rounded-lg px-2 py-1 relative" :class="[
-        isUser
-          ? 'bg-primary text-primary-foreground'
-          : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
-        // Adjust corners based on position in group
-        isFirstInGroup ? 'rounded-lg' : '',
-        !isFirstInGroup ? 'rounded-lg' : '',
-        !isLastInGroup ? (isUser ? 'rounded-br-md' : 'rounded-bl-md') : ''
-      ]" :title="new Date(message.createdAt).toLocaleString([], {
-        hour: 'numeric',
-        minute: '2-digit',
-        hour12: true,
-        month: 'short',
-        day: 'numeric',
-        year: new Date(message.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
-      })">
+      <!-- Message content with slide transform -->
+      <div
+        class="max-w-[75vw] sm:max-w-[75vw] md:max-w-[65vw] lg:max-w-3xl rounded-lg px-2 py-1 relative transition-transform"
+        :style="{ transform: slideTransform }" :class="[
+          isUser
+            ? 'bg-primary text-primary-foreground'
+            : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
+          // Adjust corners based on position in group
+          isFirstInGroup ? 'rounded-lg' : '',
+          !isFirstInGroup ? 'rounded-lg' : '',
+          !isLastInGroup ? (isUser ? 'rounded-br-md' : 'rounded-bl-md') : ''
+        ]" :title="new Date(message.createdAt).toLocaleString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true,
+          month: 'short',
+          day: 'numeric',
+          year: new Date(message.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
+        })">
         <!-- Replied message preview -->
         <div v-if="repliedMessage" class="px-2 py-1 mb-1 text-xs border-l-2 rounded bg-gray-100/50 dark:bg-gray-700/50"
           :class="isUser ? 'border-primary-foreground/50' : 'border-primary/50'">
@@ -426,10 +486,11 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Reply button (on the right for non-user messages, left for user messages) -->
-      <button @click.prevent="handleReply"
-        class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
-                         hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer">
+      <!-- Reply button (hidden on mobile since we use slide) -->
+      <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
+          opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
+          hidden md:block">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 14 4 9 9 4"></polyline>
@@ -716,5 +777,21 @@ onMounted(() => {
 :deep(.dark code:not(.code-block code)) {
   background-color: rgba(255, 255, 255, 0.1);
   color: #e1e1e1;
+}
+
+/* Add smooth transition for sliding */
+.transition-transform {
+  transition: transform 0.2s ease-out;
+}
+
+/* Ensure the slide-to-reply indicator transitions smoothly */
+.transition-opacity {
+  transition: opacity 0.2s ease-out;
+}
+
+/* Prevent text selection during sliding */
+.group {
+  user-select: none;
+  -webkit-user-select: none;
 }
 </style>
