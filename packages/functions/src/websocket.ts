@@ -3,7 +3,6 @@ import {
 	ApiGatewayManagementApiClient,
 	PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
-import { verifyToken as clerkVerifyToken } from "@clerk/backend";
 import { decodeJwt } from "@clerk/backend/jwt";
 import { type LlmAgentId, llmAgents } from "@hugin-bot/core/src/ai";
 import { llmRouter } from "@hugin-bot/core/src/ai/router";
@@ -24,6 +23,7 @@ import type {
 	CustomJwtPayload,
 	MessagePayload,
 } from "./lib/types";
+import { verifyToken } from "./util";
 
 const apiClient = new ApiGatewayManagementApiClient({
 	endpoint: Resource.WebsocketApi.managementEndpoint,
@@ -53,15 +53,7 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 			};
 		}
 
-		const verifiedToken = await clerkVerifyToken(token, {
-			secretKey: Resource.CLERK_SECRET_KEY.value,
-			authorizedParties: [
-				"http://localhost:5173",
-				"https://chat.meduave.com",
-				// Add chat app domain here
-			],
-		});
-
+		const verifiedToken = await verifyToken(token);
 		const rooms = await RoomEntity.query
 			.byUser({
 				userId: verifiedToken.sub,
@@ -121,14 +113,7 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 
 		switch (payload.action) {
 			case "ping": {
-				const { verifiedToken, error } = await clerkVerifyToken(payload.token, {
-					secretKey: Resource.CLERK_SECRET_KEY.value,
-					authorizedParties: [
-						"http://localhost:5173",
-						"https://chat.meduave.com",
-						// Add chat app domain here
-					],
-				})
+				const { verifiedToken, error } = await verifyToken(payload.token)
 					.then((t) => ({
 						error: null,
 						verifiedToken: t,
