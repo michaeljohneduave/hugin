@@ -57,9 +57,9 @@ export default class Muppeteer {
 		const result = await page.evaluate(() => {
 			// @ts-ignore
 			const reader = new Readability(document);
-			return reader.parse();
+			return reader.parse().textContent;
 		});
 
-		return result;
+		return result as string;
 	}
 }
