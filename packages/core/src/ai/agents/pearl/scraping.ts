@@ -5,7 +5,7 @@ import { Resource } from "sst";
 import { z } from "zod";
 import { storePriorityUrls } from "../../libs";
 
-export const scrapeUrl = tool({
+export const scrapeUrl_OLD = tool({
 	description: `
     Scrapes the website for content and returns the status and id of the task.
 		Use this tool when the intent is clear and there is a URL present.
@@ -39,6 +39,42 @@ export const scrapeUrl = tool({
 		const response = await lambda.send(command);
 
 		const payload = JSON.parse(new TextDecoder().decode(response.Payload));
+	},
+});
+
+export const scrapeUrl = tool({
+	description: `
+    Scrapes the website for content and returns the status and id of the task.
+		To use this tool effectively, provide a verbose description of what you want to get from the website.
+  `,
+	parameters: z.object({
+		urlset: z.array(
+			z.object({
+				url: z.string().describe("Url from the user"),
+				purpose: z
+					.string()
+					.describe("Purpose or what you want to get from the website"),
+			}),
+		),
+	}),
+	execute: async (params, toolOpts) => {
+		const lambda = new LambdaClient({});
+		const payload = {
+			urlset: params.urlset,
+		};
+		const command = new InvokeCommand({
+			FunctionName: Resource.Puppeteer.name,
+			InvocationType: "RequestResponse",
+			Payload: JSON.stringify(payload),
+		});
+
+		const response = await lambda.send(command);
+
+		const responsePayload = JSON.parse(
+			new TextDecoder().decode(response.Payload),
+		);
+		console.log(responsePayload);
+		return responsePayload;
 	},
 });
 
