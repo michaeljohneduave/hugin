@@ -14,3 +14,7 @@ export const llmAgents = [
 export const llmRouters = [];
 
 export type LlmAgentId = (typeof llmAgents)[number]["id"];
+
+export type AgentContext = {
+	userId: string;
+};

@@ -5,21 +5,37 @@ import {
 	generateText,
 	streamText,
 } from "ai";
+import type { AgentContext } from "../..";
 import { bigModel } from "../../config";
+import type { carmyTools } from "../carmy/tools";
 import { queryVectorDb, searchUrlInDb, transformQuery } from "./query";
 import { scrapeUrl, scrapingTaskStatus } from "./scraping";
+import { pearlTools } from "./tools";
 
-const toolset = {
-	queryVectorDb,
-	transformQuery,
-	searchUrlInDb,
-	scrapeUrl,
-	scrapingTaskStatus,
+type PearlToolsReturnType = ReturnType<typeof pearlTools>;
+
+// Map modes to their result types
+type ModeResultMap = {
+	stream: StreamTextResult<PearlToolsReturnType, string>;
+	generate: GenerateTextResult<PearlToolsReturnType, string>;
 };
 
-const routerPrompt = `
+export async function pearlAgent<
+	TMode extends keyof ModeResultMap = "stream", // Generic for mode keys, defaults to 'stream'
+>(
+	messages: CoreMessage[],
+	context: AgentContext,
+	mode?: TMode, // Mode is now optional, defaults via the generic
+): Promise<ModeResultMap[TMode]>; // Use lookup type for the return value
+export async function pearlAgent(
+	messages: CoreMessage[],
+	context: AgentContext,
+	mode: "stream" | "generate" = "stream",
+): Promise<ModeResultMap["stream"] | ModeResultMap["generate"]> {
+	const tools = pearlTools(context);
+	const routerPrompt = `
 	You are a intelligent task manager that can help users with their requests.
-	You have access to ${Object.keys(toolset).length} specialized tools to enhance your capabilities.
+	You have access to ${Object.keys(tools).length} specialized tools to enhance your capabilities.
 
 	When responding:
 	1. Carefully analyze the user's query to understand their intent
@@ -32,21 +48,6 @@ const routerPrompt = `
 	If you can't help the user, say so.
 `;
 
-export async function pearlAgent(
-	messages: CoreMessage[],
-	mode: "stream",
-): Promise<StreamTextResult<typeof toolset, string>>;
-export async function pearlAgent(
-	messages: CoreMessage[],
-	mode: "generate",
-): Promise<GenerateTextResult<typeof toolset, string>>;
-export async function pearlAgent(
-	messages: CoreMessage[],
-	mode: "stream" | "generate" = "stream",
-): Promise<
-	| StreamTextResult<typeof toolset, string>
-	| GenerateTextResult<typeof toolset, string>
-> {
 	if (mode === "stream") {
 		const response = await streamText({
 			model: bigModel,
@@ -54,10 +55,8 @@ export async function pearlAgent(
 			temperature: 0.5,
 			system: routerPrompt,
 			messages,
-			tools: toolset,
+			tools,
 		});
-
-		const x = response.text;
 
 		return response;
 	}
@@ -68,7 +67,7 @@ export async function pearlAgent(
 		temperature: 0.5,
 		system: routerPrompt,
 		messages,
-		tools: toolset,
+		tools,
 	});
 
 	return response;
