@@ -1,12 +1,13 @@
 <script setup lang="ts">
+import carmyAvatar from "@/assets/carmy-avatar.webp";
 import loebotteAvatar from "@/assets/loebotte-avatar.webp";
 import pearlAvatar from "@/assets/pearl-avatar.webp";
 import Message from "@/components/Message.vue";
 import RoomEvent from '@/components/RoomEvent.vue';
-import Sidebar from "@/components/Sidebar.vue"
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
+import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
 import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
 import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
 import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/lib/types";
@@ -41,18 +42,24 @@ export interface Bot {
 	avatar?: string;
 };
 
-const availableBots: User[] = [{
-	id: 'gemini',
-	name: 'Gima',
-	avatar: pearlAvatar,
-	type: "llm"
-}];
+const botAvatars = {
+	"carmy": carmyAvatar,
+	"pearl": pearlAvatar,
+	"lobot": loebotteAvatar
+}
+
+const availableBots = llmAgents.concat(llmRouters).map(agent => ({
+	id: agent.id,
+	name: agent.name,
+	avatar: botAvatars[agent.id as keyof typeof botAvatars],
+	type: "llm" as const
+}));
 
 const unknownBot: User = {
 	id: "lobot",
 	name: "Loebotte",
 	avatar: loebotteAvatar,
-	type: "llm"
+	type: "llm" as const
 }
 
 // State
