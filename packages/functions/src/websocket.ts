@@ -237,7 +237,7 @@ async function multiSendMsg(
 	connectionIds: string[],
 ) {
 	// TODO: AWS WS is limited to 128kb payloads
-	// We need to split the message into smaller chunks
+	// We need to split long messages into smaller chunks
 	// and send them separately
 	await Promise.allSettled(
 		connectionIds.map((conn) =>
@@ -298,10 +298,15 @@ async function generateLLMResponse({
 		content: message.message || "",
 	})) as CoreMessage[];
 
-	console.log("threadMessages", threadMessages);
 	const router = llmRouter[agentId as keyof typeof llmRouter];
 
-	const { response, error } = await router([...threadMessages], "generate")
+	const { response, error } = await router(
+		[...threadMessages],
+		{
+			userId: message.userId,
+		},
+		"generate",
+	)
 		.then((res) => ({
 			response: res,
 			error: null,
@@ -325,8 +330,20 @@ async function generateLLMResponse({
 		text = response.text;
 	}
 
-	// console.log("Steps Taken", JSON.stringify(response?.steps, null, 2));
-	// console.log("Tool Calls", JSON.stringify(response?.toolCalls, null, 2));
+	console.log("threadMessages", threadMessages);
+	console.log(
+		"Steps Taken",
+		JSON.stringify(
+			response?.steps.map((step) => ({
+				toolCalls: step.toolCalls,
+				toolResults: step.toolResults.length,
+				usage: step.usage,
+			})),
+			null,
+			2,
+		),
+	);
+	console.log("Reasoning", response?.reasoning);
 
 	const llmMessage = await MessageEntity.create({
 		userId: agentId,

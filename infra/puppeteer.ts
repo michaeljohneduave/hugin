@@ -6,7 +6,7 @@ export const puppeteerFn = new sst.aws.Function("Puppeteer", {
 	link: [POSTGRES_CONN_URI, Postgres, GOOGLE_GENERATIVE_AI_API_KEY],
 	architecture: "x86_64",
 	memory: "3008 MB",
-	timeout: "10 seconds",
+	timeout: "60 seconds",
 	nodejs: {
 		install: ["@sparticuz/chromium"],
 	},
