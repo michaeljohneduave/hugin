@@ -104,6 +104,7 @@ const wsFnLinks = [
 	websocketApi,
 	MessageTable,
 	CLERK_SECRET_KEY,
+	puppeteerFn,
 ];
 
 websocketApi.route("$connect", {

@@ -5,7 +5,8 @@ import {
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { verifyToken as clerkVerifyToken } from "@clerk/backend";
 import { decodeJwt } from "@clerk/backend/jwt";
-import { llmTextRouter } from "@hugin-bot/core/src/ai/router";
+import { type LlmAgentId, llmAgents } from "@hugin-bot/core/src/ai";
+import { llmRouter } from "@hugin-bot/core/src/ai/router";
 import {
 	MessageEntity,
 	type MessageEntityType,
@@ -235,6 +236,9 @@ async function multiSendMsg(
 	message: ChatPayload | MessageEntityType,
 	connectionIds: string[],
 ) {
+	// TODO: AWS WS is limited to 128kb payloads
+	// We need to split the message into smaller chunks
+	// and send them separately
 	await Promise.allSettled(
 		connectionIds.map((conn) =>
 			apiClient
@@ -267,12 +271,19 @@ async function multiSendMsg(
 async function generateLLMResponse({
 	connectionIds,
 	message,
+	agentId,
 }: {
 	message: MessageEntityType;
 	connectionIds: string[];
+	agentId: LlmAgentId;
 }) {
 	if (!message.threadId) {
 		console.error("Called generateLLMResponse with no threadId");
+		return;
+	}
+
+	if (!llmAgents.some((agent) => agent.id === agentId)) {
+		console.error("Invalid agentId", agentId);
 		return;
 	}
 
@@ -288,8 +299,9 @@ async function generateLLMResponse({
 	})) as CoreMessage[];
 
 	console.log("threadMessages", threadMessages);
+	const router = llmRouter[agentId as keyof typeof llmRouter];
 
-	const { response, error } = await llmTextRouter([...threadMessages])
+	const { response, error } = await router([...threadMessages], "generate")
 		.then((res) => ({
 			response: res,
 			error: null,
@@ -300,7 +312,6 @@ async function generateLLMResponse({
 		}));
 
 	let text = "";
-
 	if (error) {
 		console.error("Error generating LLM response", error);
 
@@ -314,19 +325,18 @@ async function generateLLMResponse({
 		text = response.text;
 	}
 
-	const senderId = "gemini";
-
-	console.log("response", response, error);
+	// console.log("Steps Taken", JSON.stringify(response?.steps, null, 2));
+	// console.log("Tool Calls", JSON.stringify(response?.toolCalls, null, 2));
 
 	const llmMessage = await MessageEntity.create({
-		userId: senderId,
+		userId: agentId,
 		action: "message",
 		message: text,
 		roomId: message.roomId,
 		type: "llm",
 		replyToMessageId: message.messageId,
 		threadId: message.threadId,
-		mentions: [senderId],
+		mentions: [agentId],
 	}).go();
 
 	await multiSendMsg(llmMessage.data, connectionIds);
@@ -374,23 +384,25 @@ export const sendMessage = async (
 	await multiSendMsg(message.data, allConnectionIds);
 
 	// if llm tag is detected send the message to the router function
+	// TODO: Check mention for llm tag
 	if (payload.mentions) {
-		// TODO: Check mention for llm tag
 		await generateLLMResponse({
 			message: message.data,
+			agentId: payload.mentions[0],
 			connectionIds: allConnectionIds,
 		});
 		// if the message is a reply to a llm message, send the message to the router function
 	} else if (payload.replyToMessageId) {
-		const message = await MessageEntity.query
+		const replyToMessage = await MessageEntity.query
 			.primary({
 				messageId: payload.replyToMessageId,
 			})
 			.go();
 
-		if (message.data[0].type === "llm") {
+		if (replyToMessage.data[0].type === "llm") {
 			await generateLLMResponse({
-				message: message.data[0],
+				message: message.data,
+				agentId: replyToMessage.data[0].userId,
 				connectionIds: allConnectionIds,
 			});
 		}
