@@ -9,7 +9,7 @@ import { groupBy, prop } from "remeda";
 import { Resource } from "sst";
 import { z } from "zod";
 import { sendPushNotification } from "./lib/firebase";
-import { protectedProcedure, publicProcedure, router, t } from "./lib/trpc";
+import { createContext, protectedProcedure, router } from "./lib/trpc";
 
 interface GiphySearchResponse {
 	data: Array<{
@@ -64,12 +64,7 @@ const giphy = router({
 });
 
 const notifications = router({
-	getVapidPublicKey: publicProcedure.query(() => {
-		const vapidPublicKey = Resource.FirebaseConfig.vapidPublicKey;
-		return { vapidPublicKey };
-	}),
-
-	savePushSubscription: publicProcedure
+	savePushSubscription: protectedProcedure
 		.input(
 			z.object({
 				userId: z.string(),
@@ -94,7 +89,7 @@ const notifications = router({
 			}
 		}),
 
-	deletePushSubscription: publicProcedure
+	deletePushSubscription: protectedProcedure
 		.input(
 			z.object({
 				userId: z.string(),
@@ -119,7 +114,7 @@ const notifications = router({
 			}
 		}),
 
-	sendPushNotification: publicProcedure
+	sendPushNotification: protectedProcedure
 		.input(
 			z.object({
 				userId: z.string(),
@@ -193,45 +188,7 @@ const notifications = router({
 });
 
 export const appRouter = router({
-	rooms: publicProcedure
-		.input(
-			z.object({
-				userId: z.string(),
-			}),
-		)
-		.query(async ({ input }) => {
-			const rooms = await RoomEntity.query
-				.byUser({
-					userId: input.userId,
-				})
-				.go();
-
-			return rooms.data;
-		}),
-	createAiRoom: publicProcedure
-		.input(
-			z.object({
-				userId: z.string(),
-				name: z.string(),
-				type: z.enum(["group", "dm", "llm"]),
-			}),
-		)
-		.mutation(async ({ input }) => {
-			const room = await RoomEntity.create({
-				roomId: crypto.randomUUID(),
-				userId: input.userId,
-				name: input.name,
-				type: input.type,
-				user: {
-					firstName: "AI",
-					lastName: "Assistant",
-					avatar: "/ai-avatar.png",
-				},
-			}).go();
-
-			return room.data;
-		}),
-	roomsWithLastMessage: publicProcedure
+	roomsWithLastMessage: protectedProcedure
 		.input(
 			z.object({
 				userId: z.string(),
@@ -258,7 +215,7 @@ export const appRouter = router({
 
 			return rooms;
 		}),
-	roomMembers: publicProcedure
+	roomMembers: protectedProcedure
 		.input(
 			z.object({
 				roomId: z.string(),
@@ -277,22 +234,7 @@ export const appRouter = router({
 				type: "user" as const,
 			}));
 		}),
-	messages: publicProcedure
-		.input(
-			z.object({
-				userId: z.string(),
-			}),
-		)
-		.query(async ({ input }) => {
-			const messages = await MessageEntity.query
-				.byUser({
-					userId: input.userId,
-				})
-				.go();
-
-			return messages.data;
-		}),
-	messagesByRoom: publicProcedure
+	messagesByRoom: protectedProcedure
 		.input(
 			z.object({
 				roomId: z.string(),
@@ -310,16 +252,11 @@ export const appRouter = router({
 
 			return messages.data.reverse();
 		}),
-	greet: publicProcedure
-		.input(z.object({ name: z.string() }))
-		.query(({ input }) => {
-			return `Hello ${input.name}!`;
-		}),
 	notifications,
 	giphy,
 });
 
 export const handler = awsLambdaRequestHandler({
 	router: appRouter,
-	createContext: (opts) => opts,
+	createContext,
 });
