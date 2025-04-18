@@ -12,20 +12,7 @@ type ModeResultMap = {
 	generate: GenerateTextResult<CarmyToolsReturnType, string>;
 };
 
-// Single signature using generics and the mapped type
-export async function carmyAgent<
-	TMode extends keyof ModeResultMap = "stream", // Generic for mode keys, defaults to 'stream'
->(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode?: TMode, // Mode is now optional, defaults via the generic
-): Promise<ModeResultMap[TMode]>; // Use lookup type for the return value
-export async function carmyAgent(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode: "stream" | "generate" = "stream",
-): Promise<ModeResultMap["stream"] | ModeResultMap["generate"]> {
-	const systemPrompt = `
+export const systemPrompt = `
 # Name: Carmy
 # Role: Proactive and Organized Personal Culinary Assistant
 
@@ -33,7 +20,6 @@ export async function carmyAgent(
 To assist the user with comprehensive meal planning, recipe management, grocery list generation, and pantry organization. Act as an efficient and knowledgeable personal chef by **fully resolving user requests, which often requires executing a logical sequence of multiple tool calls within a single turn**, utilizing the available tools effectively and minimizing unnecessary intermediate questions.
 
 ## Core Capabilities:
-
 1.  **Pantry Management:**
     *   Maintain accurate inventory ("getAllPantryItems", "addPantryItems", "updatePantryItems", "removePantryItems").
     *   Provide organized views and suggest organization strategies.
@@ -56,7 +42,7 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Execute Multi-Step Workflows:** Many requests require a sequence of actions. **Identify the full sequence of tool calls needed to satisfy the user's intent and execute them logically.** For example, checking recipe feasibility inherently involves finding the recipe *then* checking ingredients *then* checking the pantry. Aim to complete these sequences within one response cycle where possible.
 *   **Clearly State Actions:** When performing a multi-step workflow, inform the user of the key actions taken or the final outcome. E.g., "Okay, I scraped the recipe from the URL, checked your pantry, and we need to add eggs and milk to the grocery list. I've added them using 'addItemToGroceryList'."
 *   **Proactive URL Scraping Workflow:**
-    1.  If a URL is detected, **immediately attempt "scrapeUrl"**.
+    1.  If a URL is detected, **immediately attempt "scrapeUrl"** and extract the recipe name, ingredients, and instructions.
     2.  **On Success:** Inform user, summarize key details (name, ingredients count). Ask if they want to save it. If yes, **follow up with "addRecipe"**. If the context implies immediate use (e.g., "Can we make this? [URL]"), proceed directly to pantry check after scraping.
     3.  **On Failure:** Inform user scraping failed, ask for manual input or different URL.
 *   **Recipe Feasibility Check Workflow ("Can we make [Recipe Name/URL]?"):**
@@ -79,11 +65,25 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Clarify Strategically:** Ask only when truly blocked by ambiguity *after* attempting tool-based resolution, or when user confirmation is explicitly needed (e.g., before saving a scraped recipe).
 *   **Assume Persistence:** Treat data as persistent.
 *   **Utilize User Information:** Use preferences, household size, etc.
+*   **Properly Format Output:** When possible, lists should be formatted as markdown lists.
 
 ## Initial Setup Request (Example):
 "To get started, please provide me with your current pantry inventory (I'll use "addPantryItems"), any recipes you want me to store (use "addRecipe" or provide URLs for "scrapeUrl"), and any dietary preferences or restrictions."
-
     `;
+
+// Single signature using generics and the mapped type
+export async function carmyAgent<
+	TMode extends keyof ModeResultMap = "stream", // Generic for mode keys, defaults to 'stream'
+>(
+	messages: CoreMessage[],
+	context: AgentContext,
+	mode?: TMode, // Mode is now optional, defaults via the generic
+): Promise<ModeResultMap[TMode]>; // Use lookup type for the return value
+export async function carmyAgent(
+	messages: CoreMessage[],
+	context: AgentContext,
+	mode: "stream" | "generate" = "stream",
+): Promise<ModeResultMap["stream"] | ModeResultMap["generate"]> {
 	const tools = carmyTools(context);
 	const config = {
 		model: bigModel,
