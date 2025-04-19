@@ -13,7 +13,10 @@ import {
 export const carmyTools = (context: AgentContext) => {
 	const personalTools = {
 		addRecipe: tool({
-			description: "Add a new recipe to the user's recipe list",
+			description: `
+				Add a new recipe to the user's recipe list.
+				This tool is useful when you have the ingredients, instructions, and name of the recipe.
+				`,
 			parameters: z.object({
 				name: z.string(),
 				ingredients: z.array(z.string()),
@@ -40,8 +43,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		getAllRecipes: tool({
-			description:
-				"Get all recipes, if no recipes are found, return an empty array",
+			description: `
+				Get all recipes from the user's recipe list.
+				This tool is useful when you need to see all the recipes in the user's recipe list.
+				`,
 			parameters: z.object({}),
 			async execute() {
 				const recipes = await RecipeSchema.scan.go();
@@ -54,7 +59,12 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		updateRecipe: tool({
-			description: "Update a recipe",
+			description: `
+				Update a recipe.
+				This tool is useful when you need to update a recipe.
+				You can update the name, ingredients, and instructions of the recipe.
+				This tool updates the recipe as a whole, so if you want to update one of the ingredients, you need to pass in all the ingredients.
+				`,
 			parameters: z.object({
 				recipeName: z.string(),
 				ingredients: z.array(z.string()),
@@ -94,7 +104,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		removeRecipe: tool({
-			description: "Remove a recipe from the user's recipe list",
+			description: `
+				Remove a recipe from the user's recipe list.
+				This tool is useful when you need to remove a recipe from the user's recipe list.
+				`,
 			parameters: z.object({
 				recipeName: z.string(),
 			}),
@@ -120,8 +133,11 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		addPantryItems: tool({
-			description:
-				"Add items to the pantry, if no unit is provided, infer it from the item name",
+			description: `
+				Add items to the pantry.
+				This tool is useful when you need to add items to the pantry.
+				If no unit is provided, infer or take a good guess from the item name.
+				`,
 			parameters: z.object({
 				items: z.array(
 					z.object({
@@ -146,8 +162,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		getAllPantryItems: tool({
-			description:
-				"Get all pantry items, if no pantry items are found, return an empty array",
+			description: `
+				Get all pantry items.
+				This tool is useful when you need to see all the items in the user's pantry.
+				`,
 			parameters: z.object({}),
 			async execute() {
 				const pantryItems = await PantrySchema.scan.go();
@@ -160,7 +178,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		updatePantryItems: tool({
-			description: "Update pantry items",
+			description: `
+				Update pantry items.
+				This tool is useful when you need to update the quantity, unit, or self life of pantry items.
+				`,
 			parameters: z.object({
 				items: z.array(
 					z.object({
@@ -185,7 +206,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		removePantryItems: tool({
-			description: "Remove pantry items",
+			description: `
+				Remove pantry items.
+				This tool is useful when you need to remove items from the pantry.
+				`,
 			parameters: z.object({
 				items: z.array(z.string()),
 			}),
@@ -200,7 +224,12 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		getAllIngredientsForRecipe: tool({
-			description: "Get all ingredients for a recipe",
+			description: `
+				Get all ingredients for a recipe.
+				This tool is useful when you need to see all the ingredients for a recipe.
+				You can use this tool to get the ingredients for a recipe that you want to make.
+				You can also use this tool to get the ingredients for a recipe that you want to buy.
+				`,
 			parameters: z.object({
 				recipeName: z.string(),
 			}),
@@ -219,24 +248,32 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		getAllRecipesForIngredient: tool({
-			description: "Get all recipes for an ingredient",
+			description: `
+				Get all recipes for an ingredient.
+				This tool is useful when you need to see all the recipes that contain a specific ingredient.
+				You can use this tool to get the recipes for an ingredient that you want to make.
+				You can also use this tool to get the recipes for an ingredient that you want to buy.
+				`,
 			parameters: z.object({
 				ingredient: z.string(),
 			}),
 			async execute(params) {
-				// const recipes = await RecipeIngredientSchema.query
-				// 	.byIngredient({
-				// 		ingredient: params.ingredient,
-				// 	})
-				// 	.go();
-				// if (recipes.data.length === 0) {
-				// 	return "No recipes found";
-				// }
-				// return recipes.data.map((recipe) => recipe.name);
+				const recipes = await RecipeIngredientSchema.query
+					.byIngredient({
+						ingredient: params.ingredient,
+					})
+					.go();
+				if (recipes.data.length === 0) {
+					return "No recipes found";
+				}
+				return recipes.data.map((recipe) => recipe.recipeName);
 			},
 		}),
 		getGroceryList: tool({
-			description: "Get the grocery list",
+			description: `
+				Get the grocery list.
+				This tool is useful when you need to see the current active grocery list.
+				`,
 			parameters: z.object({}),
 			async execute(params) {
 				const groceryList = await GroceryListSchema.query
@@ -254,7 +291,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		createGroceryList: tool({
-			description: "Create a new grocery list",
+			description: `
+				Create a new grocery list.
+				This tool is useful when you need to create a new grocery list.
+				`,
 			parameters: z.object({
 				items: z.array(
 					z.object({
@@ -275,7 +315,10 @@ export const carmyTools = (context: AgentContext) => {
 			},
 		}),
 		addItemsToGroceryList: tool({
-			description: "Add an item to the grocery list",
+			description: `
+				Add an item to the grocery list.
+				This tool is useful when you need to add an item to the grocery list.
+				`,
 			parameters: z.object({
 				items: z.array(
 					z.object({
@@ -358,6 +401,45 @@ export const carmyTools = (context: AgentContext) => {
 					.go();
 
 				return "Item removed from grocery list";
+			},
+		}),
+		updateGroceryList: tool({
+			description: "Update the grocery list",
+			parameters: z.object({
+				items: z.array(z.string()),
+			}),
+			async execute(params) {
+				const groceryList = await GroceryListSchema.query
+					.primary({
+						userId: context.userId,
+					})
+					.where((attr, op) => op.eq(attr.isCompleted, false))
+					.go();
+
+				if (!groceryList.data.length) {
+					return "Grocery list not found";
+				}
+
+				if (groceryList.data.length > 1) {
+					return "Multiple active grocery lists found";
+				}
+
+				// Mark items as checked
+				const itemsToUpdate = groceryList.data[0].items.map((item) => ({
+					...item,
+					checked: params.items.includes(item.item),
+				}));
+
+				await GroceryListSchema.update({
+					userId: context.userId,
+					listId: groceryList.data[0].listId,
+				})
+					.set({
+						items: itemsToUpdate,
+					})
+					.go();
+
+				return "Grocery list updated";
 			},
 		}),
 		markGroceryListAsCompleted: tool({

@@ -44,8 +44,8 @@ export const scrapeUrl_OLD = tool({
 
 export const scrapeUrl = tool({
 	description: `
-    Scrapes the website for content and returns the status and id of the task.
-		To use this tool effectively, provide a verbose description of what you want to get from the website.
+    Scrapes the website for a specific purpose/s.
+		To use this tool effectively. Provide the url and a verbose description of what you want to get from the website.
   `,
 	parameters: z.object({
 		urlset: z.array(

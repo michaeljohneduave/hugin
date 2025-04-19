@@ -246,6 +246,7 @@ export const GroceryListSchema = new Entity(
 					properties: {
 						item: {
 							type: "string",
+							required: true,
 						},
 						checked: {
 							type: "boolean",
