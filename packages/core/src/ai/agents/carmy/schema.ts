@@ -69,6 +69,9 @@ export const RecipeSchema = new Entity(
 				type: "string",
 				required: true,
 			},
+			url: {
+				type: "string",
+			},
 			createdAt: {
 				type: "number",
 				default: () => Date.now(),
@@ -165,13 +168,14 @@ export const FoodPreferenceSchema = new Entity(
 				items: {
 					type: "string",
 				},
+				required: true,
 			},
 		},
 		indexes: {
 			primary: {
 				pk: {
 					field: "pk",
-					composite: ["userName"],
+					composite: ["userId"],
 				},
 				sk: {
 					field: "sk",
@@ -200,6 +204,17 @@ export const MealPlanSchema = new Entity(
 				type: "string",
 				required: true,
 			},
+			dateTime: {
+				type: "number",
+			},
+			meal: {
+				type: ["breakfast", "lunch", "dinner"],
+				required: true,
+			},
+			recipe: {
+				type: "string",
+				required: true,
+			},
 		},
 		indexes: {
 			primary: {
@@ -209,7 +224,7 @@ export const MealPlanSchema = new Entity(
 				},
 				sk: {
 					field: "sk",
-					composite: [],
+					composite: ["date"],
 				},
 			},
 		},

@@ -69,12 +69,13 @@ export const scrapeUrl = tool({
 		});
 
 		const response = await lambda.send(command);
-
 		const responsePayload = JSON.parse(
 			new TextDecoder().decode(response.Payload),
-		);
-		console.log(responsePayload);
-		return responsePayload;
+		) as {
+			statusCode: number;
+			body: string;
+		};
+		return responsePayload.body;
 	},
 });
 

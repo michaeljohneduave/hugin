@@ -254,13 +254,18 @@ async function multiSendMsg(
 
 // TODO: Add llm errors as a message entity
 async function generateLLMResponse({
-	connectionIds,
-	message,
-	agentId,
+  connectionIds,
+  message,
+  agentId,
+  user,
 }: {
-	message: MessageEntityType;
-	connectionIds: string[];
-	agentId: LlmAgentId;
+  message: MessageEntityType;
+  connectionIds: string[];
+  agentId: string;
+  user: {
+    id: string;
+    name: string;
+  };
 }) {
 	if (!message.threadId) {
 		console.error("Called generateLLMResponse with no threadId");
@@ -285,21 +290,22 @@ async function generateLLMResponse({
 
 	const router = llmRouter[agentId as keyof typeof llmRouter];
 
-	const { response, error } = await router(
-		[...threadMessages],
-		{
-			userId: message.userId,
-		},
-		"generate",
-	)
-		.then((res) => ({
-			response: res,
-			error: null,
-		}))
-		.catch((err) => ({
-			response: null,
-			error: err,
-		}));
+  const { response, error } = await router(
+    [...threadMessages],
+    {
+      userId: user.id,
+      userName: user.name,
+    },
+    "generate",
+  )
+    .then((res) => ({
+      response: res,
+      error: null,
+    }))
+    .catch((err) => ({
+      response: null,
+      error: err,
+    }));
 
 	let text = "";
 	if (error) {
@@ -354,7 +360,7 @@ export const sendMessage = async (
 		throw new Error("Connection data not found");
 	}
 
-	const jwtPayload = decodeJwt(connectionData.token);
+  const jwtPayload = decodeJwt(connectionData.token).payload as CustomJwtPayload
 	const roomMembers = await connectionStorage.getRoomMembers(payload.roomId);
 
 	const connectionIds = await Promise.all(
@@ -392,6 +398,10 @@ export const sendMessage = async (
 			message: message.data,
 			agentId: payload.mentions[0],
 			connectionIds: allConnectionIds,
+      user: {
+        id: `${jwtPayload.sub}`,
+        name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+      }
 		});
 		// if the message is a reply to a llm message, send the message to the router function
 	} else if (payload.replyToMessageId) {
@@ -406,6 +416,10 @@ export const sendMessage = async (
 				message: message.data,
 				agentId: replyToMessage.data[0].userId,
 				connectionIds: allConnectionIds,
+        user: {
+          id: `${jwtPayload.sub}`,
+          name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+        }
 			});
 		}
 	}

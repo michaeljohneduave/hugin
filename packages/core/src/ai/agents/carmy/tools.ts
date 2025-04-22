@@ -2,9 +2,13 @@ import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { tool } from "ai";
 import { z } from "zod";
 import type { AgentContext } from "../..";
+import { callAlbertAgent } from "../../libs";
+import { today } from "../commonTools";
 import { scrapeUrl } from "../pearl/scraping";
 import {
+	FoodPreferenceSchema,
 	GroceryListSchema,
+	MealPlanSchema,
 	PantrySchema,
 	RecipeIngredientSchema,
 	RecipeSchema,
@@ -21,13 +25,16 @@ export const carmyTools = (context: AgentContext) => {
 				name: z.string(),
 				ingredients: z.array(z.string()),
 				instructions: z.string(),
+				url: z.string().optional(),
 			}),
 			async execute(params, toolOpts) {
+				console.log("Executing addRecipe tool", toolOpts);
 				try {
 					await RecipeSchema.create({
 						recipeName: params.name,
 						ingredients: params.ingredients,
 						instructions: params.instructions,
+						url: params.url,
 					}).go();
 
 					return "Recipe added";
@@ -475,10 +482,101 @@ export const carmyTools = (context: AgentContext) => {
 				return "Grocery list marked as completed";
 			},
 		}),
+		getMealPlan: tool({
+			description: "Get a meal plan for a date (YYYY-MM-DD)",
+			parameters: z.object({
+				date: z.string().describe("Meal date"),
+			}),
+			async execute(params) {
+				const { date } = params;
+				const foodPreferences = await FoodPreferenceSchema.query
+					.primary({
+						userId: context.userId,
+					})
+					.go();
+
+				const mealPlan = await MealPlanSchema.query
+					.primary({
+						userId: context.userId,
+					})
+					.go();
+
+				if (!mealPlan.data.length) {
+					return "Meal plan not found";
+				}
+
+				return `
+          ${foodPreferences.data[0].userName}'s meal plan for ${date}:
+          ${mealPlan.data[0].meal}: ${mealPlan.data[0].recipe}
+        `;
+			},
+		}),
+		setMealPlan: tool({
+			description: "Set a meal plan for a date (YYYY-MM-DD)",
+			parameters: z.object({
+				date: z.string().describe("Meal date"),
+				meal: z.enum(["breakfast", "lunch", "dinner"]).describe("Meal time"),
+				recipe: z.string().describe("Recipe name"),
+			}),
+			async execute(params) {
+				const { date, meal, recipe } = params;
+				await MealPlanSchema.create({
+					userId: context.userId,
+					date,
+					meal,
+					recipe,
+				}).go();
+
+				return `${meal} for ${date} set`;
+			},
+		}),
+		getFoodPreferences: tool({
+			description: "Get food preferences",
+			parameters: z.object({}),
+			async execute() {
+				const { userId } = context;
+				const foodPreferences = await FoodPreferenceSchema.query
+					.primary({
+						userId,
+					})
+					.go();
+
+				if (!foodPreferences.data.length) {
+					return "No food preferences found";
+				}
+
+				return `
+          Food Preferences:
+          ${foodPreferences.data[0].preferences.map((preference) => `- ${preference}`).join("\n")}
+        `;
+			},
+		}),
+		setFoodPreference: tool({
+			description: "Set food preference",
+			parameters: z.object({
+				preferences: z
+					.array(z.string())
+					.describe(
+						"Food preferences, ex: vegetarian, vegan, pescatarian, no vegetables",
+					),
+			}),
+			async execute(params) {
+				const { preferences } = params;
+				await FoodPreferenceSchema.create({
+					userId: context.userId,
+					userName: context.userName,
+					preferences,
+				}).go();
+
+				return "Food preference set";
+			},
+		}),
 	};
 
 	return {
 		...personalTools,
 		scrapeUrl,
+		callAlbertAgent,
+		today,
 	};
 };

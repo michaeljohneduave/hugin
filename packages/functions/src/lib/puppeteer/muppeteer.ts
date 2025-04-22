@@ -4,7 +4,8 @@ import puppeteer, { type Browser, type Page } from "puppeteer-core";
 import { cleanUrl } from "./utils/cleanUrl.js";
 
 const YOUR_LOCAL_CHROMIUM_PATH =
-	"/home/mike/.cache/puppeteer/chrome/linux-133.0.6943.141/chrome-linux64/chrome";
+	// "/home/mike/.cache/puppeteer/chrome/linux-133.0.6943.141/chrome-linux64/chrome";
+	"/Users/michaeleduave/.cache/localChrome/chrome/mac_arm-133.0.6943.141/chrome-mac-arm64/Google Chrome for Testing.app/Contents/MacOS/Google Chrome for Testing";
 
 export default class Muppeteer {
 	// @ts-ignore

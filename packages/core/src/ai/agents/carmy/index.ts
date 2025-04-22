@@ -1,16 +1,15 @@
-import type { CoreMessage, GenerateTextResult, StreamTextResult } from "ai";
+import type {
+  CoreMessage,
+  GenerateTextResult,
+  StreamTextResult,
+  ToolSet,
+} from "ai";
 import { generateText, streamText, tool } from "ai";
-import type { AgentContext } from "../..";
-import { bigModel } from "../../config";
+import _ from "lodash";
+import type { AgentContext, ModeResultMap } from "../..";
+import { sleep } from "../../../utils";
+import { bigModel, bigThinkingModel } from "../../config";
 import { carmyTools } from "./tools";
-
-type CarmyToolsReturnType = ReturnType<typeof carmyTools>;
-
-// Map modes to their result types
-type ModeResultMap = {
-	stream: StreamTextResult<CarmyToolsReturnType, string>;
-	generate: GenerateTextResult<CarmyToolsReturnType, string>;
-};
 
 export const systemPrompt = `
 # Name: Carmy
@@ -42,9 +41,8 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Execute Multi-Step Workflows:** Many requests require a sequence of actions. **Identify the full sequence of tool calls needed to satisfy the user's intent and execute them logically.** For example, checking recipe feasibility inherently involves finding the recipe *then* checking ingredients *then* checking the pantry. Aim to complete these sequences within one response cycle where possible.
 *   **Clearly State Actions:** When performing a multi-step workflow, inform the user of the key actions taken or the final outcome. E.g., "Okay, I scraped the recipe from the URL, checked your pantry, and we need to add eggs and milk to the grocery list. I've added them using 'addItemToGroceryList'."
 *   **Proactive URL Scraping Workflow:**
-    1.  If a URL is detected, **immediately attempt "scrapeUrl"** and extract the recipe name, ingredients, and instructions.
-    2.  **On Success:** Inform user, summarize key details (name, ingredients count). Ask if they want to save it. If yes, **follow up with "addRecipe"**. If the context implies immediate use (e.g., "Can we make this? [URL]"), proceed directly to pantry check after scraping.
-    3.  **On Failure:** Inform user scraping failed, ask for manual input or different URL.
+    1.  If a URL is detected, use scrapeURL to extract the recipe name, ingredients, and instructions.
+    2.  Save the scraped data to the database using "addRecipe".
 *   **Recipe Feasibility Check Workflow ("Can we make [Recipe Name/URL]?"):**
     1.  **Identify/Acquire Recipe:**
         *   If URL provided: Execute "Proactive URL Scraping Workflow". If successful, use scraped data. If fails, stop and report.
@@ -66,39 +64,86 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Assume Persistence:** Treat data as persistent.
 *   **Utilize User Information:** Use preferences, household size, etc.
 *   **Properly Format Output:** When possible, lists should be formatted as markdown lists.
-
-## Initial Setup Request (Example):
-"To get started, please provide me with your current pantry inventory (I'll use "addPantryItems"), any recipes you want me to store (use "addRecipe" or provide URLs for "scrapeUrl"), and any dietary preferences or restrictions."
     `;
 
 // Single signature using generics and the mapped type
 export async function carmyAgent<
-	TMode extends keyof ModeResultMap = "stream", // Generic for mode keys, defaults to 'stream'
+  TMode extends keyof ModeResultMap<ReturnType<typeof carmyTools>> = "stream", // Generic for mode keys, defaults to 'stream'
 >(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode?: TMode, // Mode is now optional, defaults via the generic
-): Promise<ModeResultMap[TMode]>; // Use lookup type for the return value
+  messages: CoreMessage[],
+  context: AgentContext,
+  mode?: TMode, // Mode is now optional, defaults via the generic
+): Promise<ModeResultMap<ReturnType<typeof carmyTools>>[TMode]>; // Use lookup type for the return value
 export async function carmyAgent(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode: "stream" | "generate" = "stream",
-): Promise<ModeResultMap["stream"] | ModeResultMap["generate"]> {
-	const tools = carmyTools(context);
-	const config = {
-		model: bigModel,
-		maxSteps: 10,
-		temperature: 0.2,
-		system: systemPrompt,
-		messages,
-		tools,
-	};
+  messages: CoreMessage[],
+  context: AgentContext,
+  mode: "stream" | "generate" = "stream",
+): Promise<ModeResultMap<ReturnType<typeof carmyTools>>[typeof mode]> {
+  const tools = carmyTools(context);
 
-	if (mode === "stream") {
-		const response = await streamText(config);
-		return response;
-	}
+  const agentPrompt = `
+      You are Carmy, an expert chef and pantry manager. You have many tools to check the pantry, the grocery list, and the recipe list and user's food preferences.
+      Your goal is to determine the best course of action based on the available tools, the intent of the user, and user's goal.
 
-	const response = await generateText(config);
-	return response;
+      Example:
+      {
+        "action": "Check pantry",
+        "tool": "Check pantry",
+        "parameters": {
+          "item": "eggs"
+        }
+        "reason": "Need to know what's available"
+      }
+
+
+      Tools available:
+      ${Object.entries(tools).map(([toolName, tool]) => `
+      - ${toolName}: ${tool.description}
+      `).join("\n")}
+
+
+      What is the next step? Response with action done where there's no more action to take.
+    `;
+  const config = {
+    model: bigModel,
+    maxSteps: 10,
+    temperature: 0.2,
+    system: systemPrompt,
+    messages,
+    tools,
+  };
+
+  if (mode === "stream") {
+    const response = streamText(config);
+    return response;
+  }
+
+  const response = await generateText(config);
+
+  console.log("---Tool calling model----")
+  console.log("Response:", response.text);
+  console.log("Steps", response.steps.map(step => ({
+    step: step.stepType,
+    finishReason: step.finishReason,
+  })))
+  console.log("Tool Results:", response.steps.map((step) => step.toolResults.map(result => ({
+    toolName: result.toolName,
+    input: JSON.stringify(result.args, null, 2),
+    output: JSON.stringify(result.result, null, 2),
+  }))));
+  console.log("-------")
+
+
+  // // Separate thinking model
+  // const response2 = await generateText({
+  //   model: bigThinkingModel,
+  //   system: agentPrompt,
+  //   messages,
+  // });
+
+  // console.log("---Thinking Model----")
+  // console.log("Response:", response2.text);
+  // console.log("-------")
+
+  return response;
 }
