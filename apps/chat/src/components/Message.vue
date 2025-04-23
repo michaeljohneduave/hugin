@@ -267,12 +267,33 @@ const escapeHtml = (text: string) => {
   return div.innerHTML;
 };
 
+// Helper function to process HTML and add target="_blank" to links
+const addTargetBlankToLinks = (html: string): string => {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const links = doc.querySelectorAll('a');
+  for (const link of links) {
+    if (link.href) {
+      link.setAttribute('target', '_blank');
+      link.setAttribute('rel', 'noopener noreferrer');
+    }
+  }
+  console.log(doc.body.innerHTML);
+
+  return doc.body.innerHTML;
+};
+
 // Render message content
 const renderContent = computed(() => {
   if (!props.message.message) return '';
 
   // First sanitize the input
   const sanitizedInput = DOMPurify.sanitize(props.message.message);
+
+  // Configure DOMPurify to allow target="_blank" on links
+  const purifyConfig = {
+    ADD_ATTR: ['target', 'rel']
+  };
 
   // For LLM responses, use markdown rendering
   if (props.message.type === 'llm') {
@@ -285,17 +306,20 @@ const renderContent = computed(() => {
         return createCodeBlockHtml(part.content, part.language);
       }
       // For text parts, render as markdown
-      return marked(part.content, {
+      const renderedMarkdown = marked.parse(part.content, {
         breaks: true, // Enable line breaks
         gfm: true, // Enable GitHub Flavored Markdown
-      });
+      }) as string;
+      console.log("renderedMarkdown", renderedMarkdown);
+      // Process the rendered markdown to add target="_blank" to links
+      return addTargetBlankToLinks(renderedMarkdown);
     }).join('');
 
-    // Final sanitization of the generated HTML
-    return DOMPurify.sanitize(html);
+    // Final sanitization of the generated HTML with our config
+    return DOMPurify.sanitize(html, purifyConfig);
   }
 
-  // For user messages, keep existing behavior
+  // For user messages, keep existing behavior but ensure links open in new tab
   const parts = parseCodeBlocks(sanitizedInput);
   const html = parts.map(part => {
     if (part.type === 'code' && part.language) {
@@ -305,8 +329,8 @@ const renderContent = computed(() => {
     return escapeHtml(part.content).replace(/\n/g, '<br>');
   }).join('');
 
-  // Final sanitization of the generated HTML
-  return DOMPurify.sanitize(html);
+  // Final sanitization of the generated HTML with our config
+  return DOMPurify.sanitize(html, purifyConfig);
 });
 
 // Add copy functionality
@@ -405,7 +429,7 @@ const handleTouchEnd = () => {
     </div>
 
     <!-- Message bubble row -->
-    <div class="flex items-end gap-2 group relative" :class="[
+    <div class="flex items-end gap-2 relative" :class="[
       isUser ? 'flex-row-reverse' : 'flex-row',
       isUser ? 'mr-2' : 'ml-2'
     ]" @touchstart="handleTouchStart" @touchmove.passive="handleTouchMove" @touchend="handleTouchEnd"
@@ -488,9 +512,8 @@ const handleTouchEnd = () => {
 
       <!-- Reply button (hidden on mobile since we use slide) -->
       <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
-          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
-          opacity-0 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
-          hidden md:block">
+          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
+          md:block">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 14 4 9 9 4"></polyline>
@@ -787,11 +810,5 @@ const handleTouchEnd = () => {
 /* Ensure the slide-to-reply indicator transitions smoothly */
 .transition-opacity {
   transition: opacity 0.2s ease-out;
-}
-
-/* Prevent text selection during sliding */
-.group {
-  user-select: none;
-  -webkit-user-select: none;
 }
 </style>
