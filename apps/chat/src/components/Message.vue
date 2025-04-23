@@ -28,6 +28,7 @@ const touchStartX = ref(0);
 const touchCurrentX = ref(0);
 const isSliding = ref(false);
 const slideThreshold = 80; // pixels needed to trigger reply
+const isHovered = ref(false);
 
 const emit = defineEmits<{
   replyToMessage: [message: ChatPayloadWithUser];
@@ -37,8 +38,6 @@ const emit = defineEmits<{
 const handleReply = () => {
   emit('replyToMessage', props.message);
 };
-
-
 
 // Format relative time
 const formatRelativeTime = (timestamp: number) => {
@@ -368,7 +367,7 @@ onMounted(() => {
     { 'items-start': !isUser },
     isFirstInGroup ? 'mt-4' : 'mt-0.5',
     isLastInGroup ? 'mb-4' : 'mb-0.5'
-  ]">
+  ]" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
     <!-- Timestamp separator -->
     <div v-if="showTimestamp" class="flex justify-center w-full my-2">
       <div class="px-3 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
@@ -471,7 +470,7 @@ onMounted(() => {
       <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
-          ">
+          " :class="isHovered ? 'opacity-100' : 'opacity-0'">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 14 4 9 9 4"></polyline>
