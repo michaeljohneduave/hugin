@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Bot, ChatPayloadWithUser } from "@/pages/Chat.vue";
+import type { Bot } from "@/pages/Chat.vue";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
@@ -7,6 +7,13 @@ import { computed, onMounted, ref } from 'vue';
 import type { User } from '../services/auth';
 
 import '@/lib/prism';
+import type { ChatPayloadWithUser } from "@/types";
+
+type MessagePart = {
+  type: 'text' | 'code';
+  content: string;
+  language?: string;
+};
 
 const props = defineProps<{
   message: ChatPayloadWithUser;
@@ -15,6 +22,12 @@ const props = defineProps<{
   messages: Array<ChatPayloadWithUser>;
   availableBots: Bot[]
 }>();
+
+// Add touch handling state
+const touchStartX = ref(0);
+const touchCurrentX = ref(0);
+const isSliding = ref(false);
+const slideThreshold = 80; // pixels needed to trigger reply
 
 const emit = defineEmits<{
   replyToMessage: [message: ChatPayloadWithUser];
@@ -25,98 +38,7 @@ const handleReply = () => {
   emit('replyToMessage', props.message);
 };
 
-// Find the message being replied to, if any
-const repliedMessage = computed(() => {
-  if (!props.message.replyToMessageId) return null;
-  return props.messages.find(msg => msg.messageId === props.message.replyToMessageId);
-});
 
-// Check if this message is a reply
-const isReply = computed(() => {
-  return !!props.message.replyToMessageId;
-});
-
-// Check if this message has replies
-const hasReplies = computed(() => {
-  return props.messages.some(msg => msg.replyToMessageId === props.message.messageId);
-});
-
-// Get all replies to this message
-const messageReplies = computed(() => {
-  return props.messages.filter(msg => msg.replyToMessageId === props.message.messageId);
-});
-
-const isUser = computed(() => {
-  return props.message.type === "user" && props.currentUser.id === props.message.userId;
-});
-
-// Check if this is the first message in a group from the same sender
-const isFirstInGroup = computed(() => {
-  if (props.index === 0) return true;
-  const prevMessage = props.messages[props.index - 1];
-
-  // Check if there's a timestamp break
-  const timeDiff = props.message.createdAt - prevMessage.createdAt;
-  const minutes = timeDiff / (1000 * 60);
-
-  // Consider it a new group if:
-  // - Different sender
-  // - More than 2 hours gap
-  // - Different day
-  // - More than 15 minutes between messages
-  if (prevMessage.userId !== props.message.userId) return true;
-
-  const prevDate = new Date(prevMessage.createdAt).toDateString();
-  const currentDate = new Date(props.message.createdAt).toDateString();
-  if (prevDate !== currentDate) return true;
-
-  if (minutes > 120) return true; // 2 hour gap
-  return minutes > 15; // 15 minute gap
-});
-
-// Check if this is the last message in a group from the same sender
-const isLastInGroup = computed(() => {
-  if (props.index === props.messages.length - 1) return true;
-  const nextMessage = props.messages[props.index + 1];
-
-  // Check if there's a timestamp break
-  const timeDiff = nextMessage.createdAt - props.message.createdAt;
-  const minutes = timeDiff / (1000 * 60);
-
-  // Consider it the end of a group if:
-  // - Different sender
-  // - More than 2 hours until next message
-  // - Different day
-  // - More than 15 minutes between messages
-  if (nextMessage.userId !== props.message.userId) return true;
-
-  const nextDate = new Date(nextMessage.createdAt).toDateString();
-  const currentDate = new Date(props.message.createdAt).toDateString();
-  if (nextDate !== currentDate) return true;
-
-  if (minutes > 120) return true; // 2 hour gap
-  return minutes > 15; // 15 minute gap
-});
-
-// Check if we should show a timestamp separator
-const showTimestamp = computed(() => {
-  if (props.index === 0) return true;
-  const prevMessage = props.messages[props.index - 1];
-  const timeDiff = props.message.createdAt - prevMessage.createdAt;
-
-  // Show timestamp if:
-  // - More than 15 minutes between messages
-  // - First message of the day
-  // - First message after a long gap (2 hours)
-  const minutes = timeDiff / (1000 * 60);
-  if (minutes > 120) return true; // Show after 2 hours gap
-
-  const prevDate = new Date(prevMessage.createdAt).toDateString();
-  const currentDate = new Date(props.message.createdAt).toDateString();
-  if (prevDate !== currentDate) return true;
-
-  return minutes > 15; // Show every 15 minutes
-});
 
 // Format relative time
 const formatRelativeTime = (timestamp: number) => {
@@ -160,43 +82,6 @@ const formatRelativeTime = (timestamp: number) => {
     minute: '2-digit',
     hour12: true
   }).toLowerCase()}`;
-};
-
-// Format date for messages
-const formatDate = (timestamp: number) => {
-  const now = new Date();
-  const date = new Date(timestamp);
-
-  if (date.toDateString() === now.toDateString()) {
-    return "Today";
-  }
-
-  if (
-    date.toDateString() ===
-    new Date(now.setDate(now.getDate() - 1)).toDateString()
-  ) {
-    return "Yesterday";
-  }
-
-  return date.toLocaleDateString(undefined, {
-    weekday: "long",
-    month: "short",
-    day: "numeric",
-  });
-};
-
-// Format time for messages
-const formatTime = (timestamp: number) => {
-  return new Date(timestamp).toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-};
-
-type MessagePart = {
-  type: 'text' | 'code';
-  content: string;
-  language?: string;
 };
 
 // Function to parse code blocks in text
@@ -283,6 +168,37 @@ const addTargetBlankToLinks = (html: string): string => {
   return doc.body.innerHTML;
 };
 
+// Touch event handlers
+const handleTouchStart = (event: TouchEvent) => {
+  touchStartX.value = event.touches[0].clientX;
+  isSliding.value = true;
+};
+
+const handleTouchMove = (event: TouchEvent) => {
+  if (!isSliding.value) return;
+  touchCurrentX.value = event.touches[0].clientX;
+
+  // Prevent scrolling if we're sliding horizontally
+  const diff = touchCurrentX.value - touchStartX.value;
+  if (diff > 10) {
+    // event.preventDefault();
+  }
+};
+
+const handleTouchEnd = () => {
+  if (!isSliding.value) return;
+
+  const diff = touchCurrentX.value - touchStartX.value;
+  if (diff >= slideThreshold) {
+    emit('replyToMessage', props.message);
+  }
+
+  // Reset state
+  isSliding.value = false;
+  touchStartX.value = 0;
+  touchCurrentX.value = 0;
+};
+
 // Render message content
 const renderContent = computed(() => {
   if (!props.message.message) return '';
@@ -333,6 +249,91 @@ const renderContent = computed(() => {
   return DOMPurify.sanitize(html, purifyConfig);
 });
 
+// Computed for slide transform
+const slideTransform = computed(() => {
+  if (!isSliding.value) return '';
+  const diff = Math.max(0, Math.min(touchCurrentX.value - touchStartX.value, slideThreshold));
+  return `translateX(${diff}px)`;
+});
+
+// Find the message being replied to, if any
+const repliedMessage = computed(() => {
+  if (!props.message.replyToMessageId) return null;
+  return props.messages.find(msg => msg.messageId === props.message.replyToMessageId);
+});
+
+const isUser = computed(() => {
+  return props.message.type === "user" && props.currentUser.id === props.message.userId;
+});
+
+// Check if this is the first message in a group from the same sender
+const isFirstInGroup = computed(() => {
+  if (props.index === 0) return true;
+  const prevMessage = props.messages[props.index - 1];
+
+  // Check if there's a timestamp break
+  const timeDiff = props.message.createdAt - prevMessage.createdAt;
+  const minutes = timeDiff / (1000 * 60);
+
+  // Consider it a new group if:
+  // - Different sender
+  // - More than 2 hours gap
+  // - Different day
+  // - More than 15 minutes between messages
+  if (prevMessage.userId !== props.message.userId) return true;
+
+  const prevDate = new Date(prevMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
+  if (prevDate !== currentDate) return true;
+
+  if (minutes > 120) return true; // 2 hour gap
+  return minutes > 15; // 15 minute gap
+});
+
+// Check if this is the last message in a group from the same sender
+const isLastInGroup = computed(() => {
+  if (props.index === props.messages.length - 1) return true;
+  const nextMessage = props.messages[props.index + 1];
+
+  // Check if there's a timestamp break
+  const timeDiff = nextMessage.createdAt - props.message.createdAt;
+  const minutes = timeDiff / (1000 * 60);
+
+  // Consider it the end of a group if:
+  // - Different sender
+  // - More than 2 hours until next message
+  // - Different day
+  // - More than 15 minutes between messages
+  if (nextMessage.userId !== props.message.userId) return true;
+
+  const nextDate = new Date(nextMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
+  if (nextDate !== currentDate) return true;
+
+  if (minutes > 120) return true; // 2 hour gap
+  return minutes > 15; // 15 minute gap
+});
+
+// Check if we should show a timestamp separator
+const showTimestamp = computed(() => {
+  if (props.index === 0) return true;
+  const prevMessage = props.messages[props.index - 1];
+  const timeDiff = props.message.createdAt - prevMessage.createdAt;
+
+  // Show timestamp if:
+  // - More than 15 minutes between messages
+  // - First message of the day
+  // - First message after a long gap (2 hours)
+  const minutes = timeDiff / (1000 * 60);
+  if (minutes > 120) return true; // Show after 2 hours gap
+
+  const prevDate = new Date(prevMessage.createdAt).toDateString();
+  const currentDate = new Date(props.message.createdAt).toDateString();
+  if (prevDate !== currentDate) return true;
+
+  return minutes > 15; // Show every 15 minutes
+});
+
 // Add copy functionality
 onMounted(() => {
   // Add click handler for copy buttons
@@ -358,50 +359,6 @@ onMounted(() => {
     }
   });
 });
-
-// Add touch handling state
-const touchStartX = ref(0);
-const touchCurrentX = ref(0);
-const isSliding = ref(false);
-const slideThreshold = 80; // pixels needed to trigger reply
-
-// Computed for slide transform
-const slideTransform = computed(() => {
-  if (!isSliding.value) return '';
-  const diff = Math.max(0, Math.min(touchCurrentX.value - touchStartX.value, slideThreshold));
-  return `translateX(${diff}px)`;
-});
-
-// Touch event handlers
-const handleTouchStart = (event: TouchEvent) => {
-  touchStartX.value = event.touches[0].clientX;
-  isSliding.value = true;
-};
-
-const handleTouchMove = (event: TouchEvent) => {
-  if (!isSliding.value) return;
-  touchCurrentX.value = event.touches[0].clientX;
-
-  // Prevent scrolling if we're sliding horizontally
-  const diff = touchCurrentX.value - touchStartX.value;
-  if (diff > 10) {
-    // event.preventDefault();
-  }
-};
-
-const handleTouchEnd = () => {
-  if (!isSliding.value) return;
-
-  const diff = touchCurrentX.value - touchStartX.value;
-  if (diff >= slideThreshold) {
-    emit('replyToMessage', props.message);
-  }
-
-  // Reset state
-  isSliding.value = false;
-  touchStartX.value = 0;
-  touchCurrentX.value = 0;
-};
 
 </script>
 <template>
@@ -512,8 +469,9 @@ const handleTouchEnd = () => {
 
       <!-- Reply button (hidden on mobile since we use slide) -->
       <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
-          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
-          md:block">
+          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
+          group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
+          ">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 14 4 9 9 4"></polyline>
