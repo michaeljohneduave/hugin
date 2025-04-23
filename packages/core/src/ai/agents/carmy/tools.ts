@@ -151,7 +151,7 @@ export const carmyTools = (context: AgentContext) => {
 						name: z.string(),
 						quantity: z.number(),
 						unit: z.string().optional(),
-						selfLife: z.number().optional(),
+						shelfLife: z.number().optional(),
 					}),
 				),
 			}),
@@ -161,7 +161,7 @@ export const carmyTools = (context: AgentContext) => {
 						item: item.name,
 						quantity: item.quantity,
 						unit: item.unit || "unit",
-						selfLife: item.selfLife,
+						shelfLife: item.shelfLife,
 					})),
 				).go();
 
@@ -228,30 +228,6 @@ export const carmyTools = (context: AgentContext) => {
 				).go();
 
 				return "Pantry items removed";
-			},
-		}),
-		getAllIngredientsForRecipe: tool({
-			description: `
-				Get all ingredients for a recipe.
-				This tool is useful when you need to see all the ingredients for a recipe.
-				You can use this tool to get the ingredients for a recipe that you want to make.
-				You can also use this tool to get the ingredients for a recipe that you want to buy.
-				`,
-			parameters: z.object({
-				recipeName: z.string(),
-			}),
-			async execute(params, toolOpts) {
-				const recipe = await RecipeSchema.query
-					.primary({
-						recipeName: params.recipeName,
-					})
-					.go();
-
-				if (!recipe.data) {
-					return "Recipe not found";
-				}
-
-				return recipe.data[0].ingredients;
 			},
 		}),
 		getAllRecipesForIngredient: tool({
@@ -367,10 +343,11 @@ export const carmyTools = (context: AgentContext) => {
 				return "Item added to grocery list";
 			},
 		}),
-		removeItemFromGroceryList: tool({
-			description: "Remove an item from the grocery list",
+		removeItemsFromGroceryList: tool({
+			description:
+				"Remove items from the grocery list, this is useful for removing items already bought or not needed",
 			parameters: z.object({
-				item: z.string(),
+				item: z.array(z.string()),
 			}),
 			async execute(params) {
 				const groceryList = await GroceryListSchema.query
@@ -388,8 +365,8 @@ export const carmyTools = (context: AgentContext) => {
 					return "Multiple active grocery lists found";
 				}
 
-				const itemIndex = groceryList.data[0].items.findIndex(
-					(item) => item.item === params.item,
+				const itemIndex = groceryList.data[0].items.findIndex((item) =>
+					params.item.includes(item.item),
 				);
 
 				if (itemIndex === -1) {
@@ -498,6 +475,7 @@ export const carmyTools = (context: AgentContext) => {
 				const mealPlan = await MealPlanSchema.query
 					.primary({
 						userId: context.userId,
+						date,
 					})
 					.go();
 
@@ -509,6 +487,28 @@ export const carmyTools = (context: AgentContext) => {
           ${foodPreferences.data[0].userName}'s meal plan for ${date}:
           ${mealPlan.data[0].meal}: ${mealPlan.data[0].recipe}
         `;
+			},
+		}),
+		getAllMealPlans: tool({
+			description: "Get all meal plans",
+			parameters: z.object({}),
+			async execute() {
+				const mealPlans = await MealPlanSchema.query
+					.primary({
+						userId: context.userId,
+					})
+					.go();
+
+				if (!mealPlans.data.length) {
+					return "No meal plans found";
+				}
+
+				return mealPlans.data
+					.map(
+						(mealPlan) =>
+							`- ${mealPlan.meal} on ${mealPlan.date}: ${mealPlan.recipe}`,
+					)
+					.join("\n");
 			},
 		}),
 		setMealPlan: tool({

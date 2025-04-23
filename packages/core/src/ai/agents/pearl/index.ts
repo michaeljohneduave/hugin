@@ -6,6 +6,7 @@ import {
 	streamText,
 } from "ai";
 import type { AgentContext } from "../..";
+import { MessageEntity } from "../../../entities/message.dynamo";
 import { bigModel } from "../../config";
 import type { carmyTools } from "../carmy/tools";
 import { queryVectorDb, searchUrlInDb, transformQuery } from "./query";
@@ -35,39 +36,26 @@ Your goal is to deliver the most effective assistance possible while keeping int
 If you can't help the user, say so.
 `;
 
-export async function pearlAgent<
-	TMode extends keyof ModeResultMap = "stream", // Generic for mode keys, defaults to 'stream'
->(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode?: TMode, // Mode is now optional, defaults via the generic
-): Promise<ModeResultMap[TMode]>; // Use lookup type for the return value
-export async function pearlAgent(
-	messages: CoreMessage[],
-	context: AgentContext,
-	mode: "stream" | "generate" = "stream",
-): Promise<ModeResultMap["stream"] | ModeResultMap["generate"]> {
+export async function pearlAgent(threadId: string, context: AgentContext) {
 	const tools = pearlTools(context);
 
-	if (mode === "stream") {
-		const response = await streamText({
-			model: bigModel,
-			maxSteps: 10,
-			temperature: 0.5,
-			system: systemPrompt,
-			messages,
-			tools,
-		});
+	const messages = await MessageEntity.query
+		.byThread({
+			threadId: threadId,
+		})
+		.go();
 
-		return response;
-	}
+	const threadMessages = messages.data.map((message) => ({
+		role: message.type === "user" ? "user" : "assistant",
+		content: message.message || "",
+	})) as CoreMessage[];
 
 	const response = await generateText({
 		model: bigModel,
 		maxSteps: 10,
 		temperature: 0.5,
 		system: systemPrompt,
-		messages,
+		messages: threadMessages,
 		tools,
 	});
 

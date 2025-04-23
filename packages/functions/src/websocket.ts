@@ -109,7 +109,6 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 		}
 
 		const payload: MessagePayload = JSON.parse(event.body!);
-		console.log("Receive message", payload);
 
 		switch (payload.action) {
 			case "ping": {
@@ -254,18 +253,18 @@ async function multiSendMsg(
 
 // TODO: Add llm errors as a message entity
 async function generateLLMResponse({
-  connectionIds,
-  message,
-  agentId,
-  user,
+	message,
+	connectionIds,
+	agentId,
+	user,
 }: {
-  message: MessageEntityType;
-  connectionIds: string[];
-  agentId: string;
-  user: {
-    id: string;
-    name: string;
-  };
+	message: MessageEntityType;
+	connectionIds: string[];
+	agentId: string;
+	user: {
+		id: string;
+		name: string;
+	};
 }) {
 	if (!message.threadId) {
 		console.error("Called generateLLMResponse with no threadId");
@@ -277,35 +276,20 @@ async function generateLLMResponse({
 		return;
 	}
 
-	const messages = await MessageEntity.query
-		.byThread({
-			threadId: message.threadId,
-		})
-		.go();
-
-	const threadMessages = messages.data.map((message) => ({
-		role: message.type === "user" ? "user" : "assistant",
-		content: message.message || "",
-	})) as CoreMessage[];
-
 	const router = llmRouter[agentId as keyof typeof llmRouter];
 
-  const { response, error } = await router(
-    [...threadMessages],
-    {
-      userId: user.id,
-      userName: user.name,
-    },
-    "generate",
-  )
-    .then((res) => ({
-      response: res,
-      error: null,
-    }))
-    .catch((err) => ({
-      response: null,
-      error: err,
-    }));
+	const { response, error } = await router(message.threadId, {
+		userId: user.id,
+		userName: user.name,
+	})
+		.then((res) => ({
+			response: res,
+			error: null,
+		}))
+		.catch((err) => ({
+			response: null,
+			error: err,
+		}));
 
 	let text = "";
 	if (error) {
@@ -320,21 +304,6 @@ async function generateLLMResponse({
 	} else if (response) {
 		text = response.text;
 	}
-
-	console.log("threadMessages", threadMessages);
-	console.log(
-		"Steps Taken",
-		JSON.stringify(
-			response?.steps.map((step) => ({
-				toolCalls: step.toolCalls,
-				toolResults: step.toolResults.length,
-				usage: step.usage,
-			})),
-			null,
-			2,
-		),
-	);
-	console.log("Reasoning", response?.reasoning);
 
 	const llmMessage = await MessageEntity.create({
 		userId: agentId,
@@ -360,7 +329,8 @@ export const sendMessage = async (
 		throw new Error("Connection data not found");
 	}
 
-  const jwtPayload = decodeJwt(connectionData.token).payload as CustomJwtPayload
+	const jwtPayload = decodeJwt(connectionData.token)
+		.payload as CustomJwtPayload;
 	const roomMembers = await connectionStorage.getRoomMembers(payload.roomId);
 
 	const connectionIds = await Promise.all(
@@ -398,10 +368,10 @@ export const sendMessage = async (
 			message: message.data,
 			agentId: payload.mentions[0],
 			connectionIds: allConnectionIds,
-      user: {
-        id: `${jwtPayload.sub}`,
-        name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
-      }
+			user: {
+				id: `${jwtPayload.sub}`,
+				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+			},
 		});
 		// if the message is a reply to a llm message, send the message to the router function
 	} else if (payload.replyToMessageId) {
@@ -416,10 +386,10 @@ export const sendMessage = async (
 				message: message.data,
 				agentId: replyToMessage.data[0].userId,
 				connectionIds: allConnectionIds,
-        user: {
-          id: `${jwtPayload.sub}`,
-          name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
-        }
+				user: {
+					id: `${jwtPayload.sub}`,
+					name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+				},
 			});
 		}
 	}

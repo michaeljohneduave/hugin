@@ -22,7 +22,7 @@ export const PantrySchema = new Entity(
 			unit: {
 				type: "string",
 			},
-			selfLife: {
+			shelfLife: {
 				type: "number",
 			},
 			addedAt: {

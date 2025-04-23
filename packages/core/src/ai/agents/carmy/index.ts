@@ -1,17 +1,19 @@
 import type {
-  CoreMessage,
-  GenerateTextResult,
-  StreamTextResult,
-  ToolSet,
+	CoreMessage,
+	GenerateTextResult,
+	StreamTextResult,
+	ToolSet,
 } from "ai";
-import { generateText, streamText, tool } from "ai";
+import { generateObject, generateText, streamText, tool } from "ai";
 import _ from "lodash";
+import { z } from "zod";
 import type { AgentContext, ModeResultMap } from "../..";
+import { MessageEntity } from "../../../entities/message.dynamo";
 import { sleep } from "../../../utils";
-import { bigModel, bigThinkingModel } from "../../config";
+import { bigModel, bigThinkingModel, smolModel } from "../../config";
 import { carmyTools } from "./tools";
 
-export const systemPrompt = `
+export const carmyPrompt = `
 # Name: Carmy
 # Role: Proactive and Organized Personal Culinary Assistant
 
@@ -66,84 +68,93 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Properly Format Output:** When possible, lists should be formatted as markdown lists.
     `;
 
-// Single signature using generics and the mapped type
-export async function carmyAgent<
-  TMode extends keyof ModeResultMap<ReturnType<typeof carmyTools>> = "stream", // Generic for mode keys, defaults to 'stream'
->(
-  messages: CoreMessage[],
-  context: AgentContext,
-  mode?: TMode, // Mode is now optional, defaults via the generic
-): Promise<ModeResultMap<ReturnType<typeof carmyTools>>[TMode]>; // Use lookup type for the return value
-export async function carmyAgent(
-  messages: CoreMessage[],
-  context: AgentContext,
-  mode: "stream" | "generate" = "stream",
-): Promise<ModeResultMap<ReturnType<typeof carmyTools>>[typeof mode]> {
-  const tools = carmyTools(context);
+		type EntityMessage = {
+	role: "user" | "assistant";
+	name: string;
+	content: string;
+};
 
-  const agentPrompt = `
-      You are Carmy, an expert chef and pantry manager. You have many tools to check the pantry, the grocery list, and the recipe list and user's food preferences.
-      Your goal is to determine the best course of action based on the available tools, the intent of the user, and user's goal.
+export class CarmyAgent {
+	private context: AgentContext;
+	private tools: ToolSet;
 
-      Example:
-      {
-        "action": "Check pantry",
-        "tool": "Check pantry",
-        "parameters": {
-          "item": "eggs"
-        }
-        "reason": "Need to know what's available"
-      }
+	constructor(context: AgentContext) {
+		this.context = context;
+		this.tools = carmyTools(context);
+	}
 
+	private logResponse(response: GenerateTextResult<typeof this.tools, string>) {
+		console.log("---Tool calling model----");
+		console.log("Response:", response.text);
+		console.log(
+			"Steps",
+			response.steps.map((step) => ({
+				step: step,
+			})),
+		);
+		console.log("-------");
+	}
 
-      Tools available:
-      ${Object.entries(tools).map(([toolName, tool]) => `
-      - ${toolName}: ${tool.description}
-      `).join("\n")}
+	async execute(messages: CoreMessage[]) {
+		const config = {
+			model: bigModel,
+			maxSteps: 10,
+			temperature: 0.2,
+			system: carmyPrompt,
+			messages,
+			tools: this.tools,
+		};
+		const response = await generateText(config);
+		this.logResponse(response);
+		return response;
+	}
 
+	async executeWithAssistant(messages: EntityMessage[]) {
+		const config = {
+			model: bigModel,
+			temperature: 0.2,
+			systemPrompt: `
+				${carmyPrompt}
 
-      What is the next step? Response with action done where there's no more action to take.
-    `;
-  const config = {
-    model: bigModel,
-    maxSteps: 10,
-    temperature: 0.2,
-    system: systemPrompt,
-    messages,
-    tools,
-  };
-
-  if (mode === "stream") {
-    const response = streamText(config);
-    return response;
-  }
-
-  const response = await generateText(config);
-
-  console.log("---Tool calling model----")
-  console.log("Response:", response.text);
-  console.log("Steps", response.steps.map(step => ({
-    step: step.stepType,
-    finishReason: step.finishReason,
-  })))
-  console.log("Tool Results:", response.steps.map((step) => step.toolResults.map(result => ({
-    toolName: result.toolName,
-    input: JSON.stringify(result.args, null, 2),
-    output: JSON.stringify(result.result, null, 2),
-  }))));
-  console.log("-------")
-
-
-  // // Separate thinking model
-  // const response2 = await generateText({
-  //   model: bigThinkingModel,
-  //   system: agentPrompt,
-  //   messages,
-  // });
-
-  // console.log("---Thinking Model----")
-  // console.log("Response:", response2.text);
-  // console.log("-------")
-
-  return response;
+				- Follow the instructions of the helper.
+			`,
+			prompt: `
+				${messages
+					.map(
+						(message) => `
+					<${message.role}>
+						<name>
+							${message.name}
+						</name>
+						<content>
+							${message.content}
+						</content>
+					</${message.role}>
+				`,
+					)
+					.join("\n")}
+			`,
+		};
+		const response = await generateText(config);
+		this.logResponse(response);
+		return response;
+	}
 }
+
+// For backward compatibility
+export const carmyAgent = async (threadId: string, context: AgentContext) => {
+	const agent = new CarmyAgent(context);
+	const messages = await MessageEntity.query
+		.byThread({
+			threadId: threadId,
+		})
+		.go();
+
+	const threadMessages = messages.data.map((message) => ({
+		role: message.type === "user" ? "user" : "assistant",
+		content: message.message || "",
+	})) as CoreMessage[];
+
+	const response = await agent.execute(threadMessages);
+	return response;
+};
