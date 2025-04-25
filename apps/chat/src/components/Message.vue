@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import type { Bot } from "@/pages/Chat.vue";
+import type { ChatPayload, User } from "@hugin-bot/core/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
-import { computed, onMounted, ref } from 'vue';
-import type { User } from '../services/auth';
+import { computed, ref } from 'vue';
 
 import '@/lib/prism';
-import type { ChatPayloadWithUser } from "@/types";
 
 type MessagePart = {
   type: 'text' | 'code';
@@ -16,10 +15,10 @@ type MessagePart = {
 };
 
 const props = defineProps<{
-  message: ChatPayloadWithUser;
+  message: ChatPayload;
   index: number;
   currentUser: User;
-  messages: Array<ChatPayloadWithUser>;
+  messages: Array<ChatPayload>;
   availableBots: Bot[]
 }>();
 
@@ -31,13 +30,10 @@ const slideThreshold = 80; // pixels needed to trigger reply
 const isHovered = ref(false);
 
 const emit = defineEmits<{
-  replyToMessage: [message: ChatPayloadWithUser];
+  replyToMessage: [message: ChatPayload];
 }>();
 
-// Add function to handle reply click
-const handleReply = () => {
-  emit('replyToMessage', props.message);
-};
+
 
 // Format relative time
 const formatRelativeTime = (timestamp: number) => {
@@ -162,9 +158,12 @@ const addTargetBlankToLinks = (html: string): string => {
       link.setAttribute('rel', 'noopener noreferrer');
     }
   }
-  console.log(doc.body.innerHTML);
-
   return doc.body.innerHTML;
+};
+
+// Add function to handle reply click
+const handleReply = () => {
+  emit('replyToMessage', props.message);
 };
 
 // Touch event handlers
@@ -225,7 +224,6 @@ const renderContent = computed(() => {
         breaks: true, // Enable line breaks
         gfm: true, // Enable GitHub Flavored Markdown
       }) as string;
-      console.log("renderedMarkdown", renderedMarkdown);
       // Process the rendered markdown to add target="_blank" to links
       return addTargetBlankToLinks(renderedMarkdown);
     }).join('');

@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
-import type { Bot, ChatPayloadWithUser } from '@/pages/Chat.vue';
-import type { ChatPayload } from "@hugin-bot/functions/src/lib/types";
+import type { Bot } from '@/pages/Chat.vue';
+import type { ChatPayload, User } from '@hugin-bot/core/src/types';
 import {
   File as FileIcon,
   Plus as PlusIcon,
   Send as SendIcon,
   Smile as SmileIcon,
 } from "lucide-vue-next";
-import type { User } from "../services/auth";
 import FilePreview from './FilePreview.vue';
 import GifPicker from './GifPicker.vue';
 
@@ -19,7 +18,7 @@ const props = defineProps<{
   currentChatId: string;
   availableBots: Bot[];
   isDarkMode: boolean;
-  replyTo?: ChatPayloadWithUser | null;
+  replyTo?: ChatPayload | null;
 }>();
 
 const emit = defineEmits<{
@@ -44,8 +43,6 @@ const audioRecording = ref<string | null>(null);
 const showBotSuggestions = ref(false);
 const taggedBot = ref<Bot | null>(null);
 const selectedBotIndex = ref(0); // Track currently selected bot in the dropdown
-
-// Temporary bot for testing
 
 // Auto-resize textarea
 const autoResize = () => {
@@ -122,9 +119,10 @@ const selectAndSendGif = (url: string) => {
   const message: ChatPayload = {
     messageId: crypto.randomUUID(),
     action: 'message',
-    senderId: props.currentUser.id,
+    userId: props.currentUser.id,
+    user: props.currentUser,
     roomId: props.currentChatId,
-    timestamp: Date.now(),
+    createdAt: Date.now(),
     imageFiles: [url],
     type: "user",
   };
@@ -213,9 +211,9 @@ const sendMessage = () => {
   const message: ChatPayload = {
     messageId: crypto.randomUUID(),
     action: "message",
-    senderId: props.currentUser.id,
+    userId: props.currentUser.id,
     roomId: props.currentChatId,
-    timestamp: Date.now(),
+    createdAt: Date.now(),
     type: "user",
     ...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
       ? {
@@ -227,6 +225,7 @@ const sendMessage = () => {
         message: messageInput.value,
         taggedBotId: taggedBot.value?.id
       }),
+    user: props.currentUser
   };
 
   if (taggedBot.value) {

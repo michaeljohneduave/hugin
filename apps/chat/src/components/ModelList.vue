@@ -1,10 +1,11 @@
 <script setup lang="ts">
+import type { User } from "@hugin-bot/core/src/types";
 import { BotIcon } from "lucide-vue-next";
-import type { User } from "../services/auth";
 
-const props = defineProps<{
+defineProps<{
   llms: User[];
 }>();
+
 </script>
 
 <template>

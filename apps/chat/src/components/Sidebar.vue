@@ -1,5 +1,5 @@
 <script lang="ts" setup>
-import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
+import type { RouterOutput } from "@hugin-bot/core/src/types";
 import {
   Bot,
   LogOut as LogOutIcon,
@@ -29,25 +29,6 @@ const emit = defineEmits<{
 
 const showUserMenu = ref(false);
 const activeTab = ref<'people' | 'ai'>('ai');
-
-// Filter chats based on active tab
-const filteredChats = computed(() => {
-  return props.rooms.filter(chat => {
-    // Filter based on room type
-    const isAiChat = chat.type === 'llm';
-    return activeTab.value === 'ai' ? isAiChat : !isAiChat;
-  });
-});
-
-// Handle chat selection
-const handleChatSelect = (chatId: string) => {
-  emit('selectChat', chatId);
-};
-
-// Handle new AI chat creation
-const handleNewAiChat = () => {
-  emit('createNewAiChat');
-};
 
 // Add logout handler
 const handleLogout = async () => {

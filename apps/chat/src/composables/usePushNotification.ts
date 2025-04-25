@@ -1,3 +1,4 @@
+import { useSession } from "@clerk/vue";
 import { getToken, onMessage } from "firebase/messaging";
 import { ref } from "vue";
 import { onMounted, onUnmounted, watch } from "vue";
@@ -45,6 +46,7 @@ interface InAppNotificationOptions {
 export function usePushNotification() {
 	const notification = useNotification();
 	const { user } = useAuth();
+	const { session } = useSession();
 	const trpc = useTrpc();
 	const token = ref<string | null>(null);
 	const isLoading = ref(false);
@@ -155,7 +157,7 @@ export function usePushNotification() {
 			return "denied";
 		}
 
-		if (!user.value?.id) {
+		if (!session.value?.user.id) {
 			console.error("[Debug] User not logged in");
 			notification.error("You must be logged in to enable notifications");
 			return "denied";
@@ -199,7 +201,7 @@ export function usePushNotification() {
 	// The service worker will receive the message and show the notification
 	// This is handled in the service-worker.ts file
 	async function testPushNotification(msg: string) {
-		if (!user.value?.id) {
+		if (!session.value?.user.id) {
 			notification.error("You must be logged in to test notifications");
 			return;
 		}
@@ -207,7 +209,7 @@ export function usePushNotification() {
 		try {
 			console.log("[Debug] Testing push notification...");
 			await trpc.notifications.sendPushNotification.mutate({
-				userId: user.value.id,
+				userId: session.value.user.id,
 				title: "Test Notification",
 				body: msg,
 				url: "/",
@@ -340,7 +342,7 @@ export function usePushNotification() {
 		try {
 			isLoading.value = true;
 			console.log("[Debug] Unsubscribing from push notifications...");
-			if (!user.value?.id) {
+			if (!session.value?.user.id) {
 				throw new Error("User not logged in");
 			}
 
@@ -348,7 +350,7 @@ export function usePushNotification() {
 			if (!currentToken) return true;
 
 			// Clean up the push token
-			await unregisterToken(currentToken, user.value.id);
+			await unregisterToken(currentToken, session.value.user.id);
 
 			// Revoke notification permission
 			const permission = await Notification.requestPermission();
@@ -378,7 +380,7 @@ export function usePushNotification() {
 
 	// Watch for user changes
 	watch(
-		() => user.value?.id,
+		() => session.value?.user.id,
 		async (newUserId) => {
 			if (newUserId) {
 				await initialize(newUserId);
@@ -394,10 +396,10 @@ export function usePushNotification() {
 		if (foregroundUnsubscribe) {
 			foregroundUnsubscribe();
 		}
-		if (user.value?.id) {
+		if (session.value?.user.id) {
 			const currentToken = getStoredToken();
 			if (currentToken) {
-				await unregisterToken(currentToken, user.value.id);
+				await unregisterToken(currentToken, session.value.user.id);
 			}
 		}
 	});

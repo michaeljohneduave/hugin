@@ -1,5 +1,6 @@
+import type { User } from "@hugin-bot/core/src/types";
 import { ref } from "vue";
-import { type User, getAuthService } from "../services/auth";
+import { getAuthService } from "../services/auth";
 
 export function useAuth() {
 	const user = ref<User | null>(null);
