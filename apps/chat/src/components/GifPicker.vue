@@ -1,7 +1,8 @@
 <script setup lang="ts">
+import { useSession } from "@clerk/vue";
 import { useQuery } from "@tanstack/vue-query";
 import { Search as SearchIcon } from "lucide-vue-next";
-import { debounce, funnel, } from "remeda"
+import { funnel, } from "remeda"
 import { onMounted, ref, watch } from "vue";
 import { useTrpc } from "../lib/trpc";
 
@@ -22,6 +23,12 @@ interface GifResult {
 	images: GifImages;
 }
 
+const trpc = useTrpc();
+const { session } = useSession();
+const searchQuery = ref("");
+const gifs = ref<GifResult[]>([]);
+let debouncedSearch: ReturnType<typeof funnel>;
+
 const props = defineProps<{
 	isDarkMode: boolean;
 }>();
@@ -29,11 +36,6 @@ const props = defineProps<{
 const emit = defineEmits<{
 	select: [url: string];
 }>();
-
-const trpc = useTrpc();
-const searchQuery = ref("");
-const gifs = ref<GifResult[]>([]);
-let debouncedSearch: ReturnType<typeof funnel>;
 
 // Initialize with trending gifs
 const { data: trendingGifs } = useQuery({
@@ -43,12 +45,12 @@ const { data: trendingGifs } = useQuery({
 			limit: 20,
 		});
 	},
-	enabled: import.meta.env.PROD,
+	enabled: () => import.meta.env.PROD && !!session.value?.user.id,
 	staleTime: 1000 * 60 * 60,
 	refetchOnMount: true,
 });
 
-const { data: searchResults, isLoading, error, refetch } = useQuery({
+const { data: searchGifResults, isLoading, error, refetch } = useQuery({
 	queryKey: ["giphy-search", searchQuery],
 	queryFn: async () => {
 		if (!searchQuery.value.trim()) {
@@ -66,7 +68,7 @@ const { data: searchResults, isLoading, error, refetch } = useQuery({
 });
 
 // Update gifs ref when search results change
-watch(searchResults, (newResults) => {
+watch(searchGifResults, (newResults) => {
 	if (newResults) {
 		gifs.value = newResults;
 	}
@@ -75,7 +77,7 @@ watch(searchResults, (newResults) => {
 // Watch trending gifs and update when search is empty
 watch(trendingGifs, (newResults) => {
 	if (newResults && !searchQuery.value.trim()) {
-		gifs.value = newResults;
+		gifs.value = newResults || [];
 	}
 });
 
@@ -98,7 +100,6 @@ onMounted(() => {
 		minQuietPeriodMs: 500,
 	});
 });
-
 </script>
 
 <template>
