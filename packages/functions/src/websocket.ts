@@ -4,27 +4,26 @@ import {
 	PostToConnectionCommand,
 } from "@aws-sdk/client-apigatewaymanagementapi";
 import { decodeJwt } from "@clerk/backend/jwt";
-import { type LlmAgentId, llmAgents } from "@hugin-bot/core/src/ai";
+import { llmAgents } from "@hugin-bot/core/src/ai";
 import { llmRouter } from "@hugin-bot/core/src/ai/router";
+import { GENERAL_ROOM } from "@hugin-bot/core/src/config";
 import {
 	MessageEntity,
 	type MessageEntityType,
 } from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
-import type { CoreMessage } from "ai";
+import type {
+	ChatPayload,
+	CustomJwtPayload,
+	MessagePayload,
+} from "@hugin-bot/core/src/types";
 import type { APIGatewayProxyEvent } from "aws-lambda";
 import { Resource } from "sst";
 import {
 	type ConnectionStorage,
 	createConnectionStorage,
 } from "./lib/connection-storage";
-import type {
-	ChatPayload,
-	CustomJwtPayload,
-	MessagePayload,
-} from "./lib/types";
 import { verifyToken } from "./util";
-
 const apiClient = new ApiGatewayManagementApiClient({
 	endpoint: Resource.WebsocketApi.managementEndpoint,
 	maxAttempts: 0,
@@ -53,7 +52,7 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 			};
 		}
 
-		const verifiedToken = await verifyToken(token);
+		const verifiedToken = (await verifyToken(token)) as CustomJwtPayload;
 		const rooms = await RoomEntity.query
 			.byUser({
 				userId: verifiedToken.sub,
@@ -62,29 +61,44 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 				pages: "all",
 			});
 
+		if (rooms.data.length === 0) {
+			const r = await RoomEntity.create({
+				roomId: GENERAL_ROOM,
+				name: GENERAL_ROOM,
+				userId: verifiedToken.sub,
+				user: {
+					firstName: verifiedToken.firstName,
+					lastName: verifiedToken.lastName,
+					avatar: verifiedToken.imageUrl,
+				},
+				status: "active",
+				type: "group",
+			}).go();
+
+			rooms.data.push(r.data);
+		}
+
 		// We want to make this connect handler "very" fast
 		// For now just warn that the user will be joining >100 rooms
 		// Let future Michael handle the optimization of joining >100 rooms
 		if (rooms.data.length > 100) {
 			console.log("User is in 100 rooms");
 		}
-
-		await connectionStorage.refreshUserConnection(
-			verifiedToken.sub,
-			token,
-			connectionId,
+		console.log(
+			"Joining rooms",
+			rooms.data.map((room) => room.roomId),
 		);
-
-		// Join all rooms
-		await Promise.all(
-			rooms.data.map((room) =>
-				connectionStorage.addUserToRoom(
-					room.roomId,
-					verifiedToken.sub,
-					connectionId,
-				),
+		await Promise.all([
+			connectionStorage.refreshUserConnection(
+				verifiedToken.sub,
+				token,
+				connectionId,
 			),
-		);
+			connectionStorage.addConnIdToRooms(
+				rooms.data.map((room) => room.roomId),
+				connectionId,
+			),
+		]);
 
 		return {
 			statusCode: 200,
@@ -109,7 +123,6 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 		}
 
 		const payload: MessagePayload = JSON.parse(event.body!);
-
 		switch (payload.action) {
 			case "ping": {
 				const { verifiedToken, error } = await verifyToken(payload.token)
@@ -128,7 +141,7 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 						statusCode: 500,
 					};
 				}
-
+				console.log("Connection id", connectionId);
 				await Promise.allSettled([
 					connectionStorage.refreshUserConnection(
 						verifiedToken.sub,
@@ -158,14 +171,11 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 							lastName: jwtPayload.lastName,
 							avatar: jwtPayload.imageUrl,
 						},
+						status: "active",
 					}).go({
 						response: "none",
 					}),
-					connectionStorage.addUserToRoom(
-						payload.roomId,
-						connectionData.userId,
-						connectionId,
-					),
+					connectionStorage.addConnIdToRooms([payload.roomId], connectionId),
 				]);
 				break;
 			}
@@ -179,14 +189,17 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 				}
 
 				await Promise.all([
-					RoomEntity.delete({
+					RoomEntity.update({
 						roomId: payload.roomId,
 						userId: connectionData.userId,
-					}).go(),
-					connectionStorage.removeUserFromRoom(
-						payload.roomId,
-						connectionData.userId,
-					),
+					})
+						.set({
+							status: "inactive",
+						})
+						.go({
+							response: "none",
+						}),
+					connectionStorage.delConnIdFromRoom(payload.roomId, connectionId),
 				]);
 				break;
 			}
@@ -329,22 +342,26 @@ export const sendMessage = async (
 		throw new Error("Connection data not found");
 	}
 
+	console.log("Connection data", connectionData);
+
 	const jwtPayload = decodeJwt(connectionData.token)
 		.payload as CustomJwtPayload;
-	const roomMembers = await connectionStorage.getRoomMembers(payload.roomId);
-
-	const connectionIds = await Promise.all(
-		roomMembers.map((userId) => connectionStorage.getUserConnections(userId)),
+	const connectionIds = await connectionStorage.getRoomConnectionIds(
+		payload.roomId,
 	);
 
-	const messageId = crypto.randomUUID();
+	console.log("Room members", connectionId, payload.roomId, connectionIds);
+
+	payload.messageId = crypto.randomUUID();
+	payload.threadId = payload.threadId || crypto.randomUUID();
+
 	// Note: For now we are waiting for the message to be created before sending it to the client
 	// This might be slower than sending the message immediately
 	// TODO: Measure the performance of this
-	const message = await MessageEntity.create({
-		messageId,
+	await MessageEntity.create({
+		messageId: payload.messageId,
 		action: "message" as const,
-		userId: payload.senderId,
+		userId: payload.userId,
 		message: payload.message,
 		imageFiles: payload.imageFiles,
 		audioFiles: payload.audioFiles,
@@ -357,17 +374,15 @@ export const sendMessage = async (
 		threadId: payload.threadId,
 	}).go();
 
-	const allConnectionIds = connectionIds.flat();
-
-	await multiSendMsg(message.data, allConnectionIds);
+	multiSendMsg(payload, connectionIds);
 
 	// if llm tag is detected send the message to the router function
 	// TODO: Check mention for llm tag
 	if (payload.mentions) {
 		await generateLLMResponse({
-			message: message.data,
+			message: payload,
 			agentId: payload.mentions[0],
-			connectionIds: allConnectionIds,
+			connectionIds,
 			user: {
 				id: `${jwtPayload.sub}`,
 				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
@@ -383,9 +398,9 @@ export const sendMessage = async (
 
 		if (replyToMessage.data[0].type === "llm") {
 			await generateLLMResponse({
-				message: message.data,
+				message: payload,
 				agentId: replyToMessage.data[0].userId,
-				connectionIds: allConnectionIds,
+				connectionIds,
 				user: {
 					id: `${jwtPayload.sub}`,
 					name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
@@ -424,4 +439,24 @@ export const disconnect = async (event: APIGatewayProxyEvent) => {
 			statusCode: 500,
 		};
 	}
+};
+
+export const agentResponse = (event: APIGatewayProxyEvent) => {
+	const body = JSON.parse(event.body!);
+	const messagePayload: ChatPayload = body.messagePayload;
+	const connectionId = body.connectionIds;
+
+	if (!messagePayload || !connectionId) {
+		return {
+			statusCode: 400,
+		};
+	}
+
+	MessageEntity.create(messagePayload).go();
+
+	multiSendMsg(messagePayload, [connectionId]);
+
+	return {
+		statusCode: 200,
+	};
 };

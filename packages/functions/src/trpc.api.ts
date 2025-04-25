@@ -1,10 +1,8 @@
-import crypto from "node:crypto";
 import { MessageEntity } from "@hugin-bot/core/src/entities/message.dynamo";
 import { PnSubscriptionEntity } from "@hugin-bot/core/src/entities/pnSubscription.dynamo";
 import { RoomMessagesService } from "@hugin-bot/core/src/entities/room-messages.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
 import { awsLambdaRequestHandler } from "@trpc/server/adapters/aws-lambda";
-import Valkey from "iovalkey";
 import { groupBy, prop } from "remeda";
 import { Resource } from "sst";
 import { z } from "zod";
@@ -234,23 +232,44 @@ export const appRouter = router({
 				type: "user" as const,
 			}));
 		}),
+	userRooms: protectedProcedure.query(async ({ ctx }) => {
+		const rooms = await RoomEntity.query
+			.byUser({
+				userId: ctx.userId,
+			})
+			.go();
+		return rooms.data;
+	}),
 	messagesByRoom: protectedProcedure
 		.input(
 			z.object({
 				roomId: z.string(),
+				limit: z.number().default(1000),
 			}),
 		)
 		.query(async ({ input }) => {
-			const messages = await MessageEntity.query
-				.byRoom({
-					roomId: input.roomId,
-				})
-				.go({
-					limit: 50,
-					order: "desc",
-				});
+			const [members, messages] = await Promise.all([
+				RoomEntity.query
+					.primary({
+						roomId: input.roomId,
+					})
+					.go(),
+				MessageEntity.query
+					.byRoom({
+						roomId: input.roomId,
+					})
+					.go({
+						limit: input.limit,
+						order: "desc",
+					}),
+			]);
 
-			return messages.data.reverse();
+			messages.data.reverse();
+
+			return {
+				members: members.data,
+				messages: messages.data,
+			};
 		}),
 	notifications,
 	giphy,
