@@ -187,6 +187,19 @@ const fetchRooms = async () => {
 
 const handleWebSocketMessage = (event: MessageEvent) => {
 	const data = JSON.parse(event.data) as ChatPayload;
+	let user: User;
+
+	if (data.type === "event" || data.type === "user") {
+		user = userMap.get(data.userId) || {
+			id: data.userId,
+			name: "Unknown",
+			type: data.type,
+		};
+	} else {
+		user = availableBots.find(bot => bot.id === data.userId) || unknownBot;
+	}
+
+	data.user = user;
 	chatMessages.value.push(data);
 
 	if (data.action === 'message') {
