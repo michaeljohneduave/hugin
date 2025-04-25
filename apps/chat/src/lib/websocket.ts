@@ -53,7 +53,6 @@ export class WebSocketManager implements WebSocketClient {
 	}
 
 	private handleFocus = () => {
-		console.log("Focus detected");
 		if (this.inactivityTimer) {
 			clearTimeout(this.inactivityTimer);
 			this.inactivityTimer = null;
@@ -72,11 +71,9 @@ export class WebSocketManager implements WebSocketClient {
 	};
 
 	private handleBlur = () => {
-		console.log("Blur detected");
 		if (!this.inactivityTimer) {
 			this.inactivityTimer = setTimeout(() => {
 				this.isInactive = true;
-				console.log("User is inactive, disconnecting");
 				this.disconnect();
 			}, this.INACTIVITY_THRESHOLD);
 		}
@@ -91,15 +88,12 @@ export class WebSocketManager implements WebSocketClient {
 			throw new Error("No token provided for WebSocket connection");
 		}
 
-		console.log("Connecting to WebSocket");
-
 		if (this.ws?.readyState === WebSocket.OPEN) {
 			return;
 		}
 
 		// Don't connect if the app is inactive
 		if (this.isInactive) {
-			console.log("Not connecting - app is inactive");
 			return;
 		}
 
@@ -122,8 +116,6 @@ export class WebSocketManager implements WebSocketClient {
 			for (const callback of this.connectionCallbacks) {
 				callback();
 			}
-
-			console.log("WebSocket connected");
 		};
 
 		this.ws.onmessage = (event) => {
