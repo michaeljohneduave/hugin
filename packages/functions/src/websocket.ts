@@ -376,20 +376,9 @@ export const sendMessage = async (
 
 	multiSendMsg(payload, connectionIds);
 
-	// if llm tag is detected send the message to the router function
-	// TODO: Check mention for llm tag
-	if (payload.mentions) {
-		await generateLLMResponse({
-			message: payload,
-			agentId: payload.mentions[0],
-			connectionIds,
-			user: {
-				id: `${jwtPayload.sub}`,
-				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
-			},
-		});
-		// if the message is a reply to a llm message, send the message to the router function
-	} else if (payload.replyToMessageId) {
+	let agentId = payload.mentions?.[0];
+
+	if (!agentId && payload.replyToMessageId) {
 		const replyToMessage = await MessageEntity.query
 			.primary({
 				messageId: payload.replyToMessageId,
@@ -397,16 +386,20 @@ export const sendMessage = async (
 			.go();
 
 		if (replyToMessage.data[0].type === "llm") {
-			await generateLLMResponse({
-				message: payload,
-				agentId: replyToMessage.data[0].userId,
-				connectionIds,
-				user: {
-					id: `${jwtPayload.sub}`,
-					name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
-				},
-			});
+			agentId = replyToMessage.data[0].userId;
 		}
+	}
+
+	if (agentId) {
+		await generateLLMResponse({
+			message: payload,
+			agentId,
+			connectionIds,
+			user: {
+				id: `${jwtPayload.sub}`,
+				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+			},
+		});
 	}
 };
 
