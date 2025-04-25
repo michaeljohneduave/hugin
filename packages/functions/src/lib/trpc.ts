@@ -1,12 +1,6 @@
-import {
-	TRPCError,
-	type inferRouterInputs,
-	type inferRouterOutputs,
-	initTRPC,
-} from "@trpc/server";
+import { TRPCError, initTRPC } from "@trpc/server";
 import type { CreateAWSLambdaContextOptions } from "@trpc/server/adapters/aws-lambda";
 import type { APIGatewayProxyEvent, APIGatewayProxyEventV2 } from "aws-lambda";
-import type { appRouter } from "../trpc.api";
 import { verifyToken } from "../util";
 
 export function createContext(
@@ -45,7 +39,3 @@ export const protectedProcedure = t.procedure.use(
 	},
 );
 export const router = t.router;
-
-export type AppRouter = typeof appRouter;
-export type RouterInput = inferRouterInputs<AppRouter>;
-export type RouterOutput = inferRouterOutputs<AppRouter>;
