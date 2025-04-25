@@ -1,14 +1,6 @@
 import type { Clerk, UserResource } from "@clerk/types";
-import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
+import type { User } from "@hugin-bot/core/src/types";
 import { clerk } from "../lib/clerk";
-
-export interface User {
-	id: string;
-	name: string;
-	avatar?: string;
-	email?: string;
-	type: Exclude<MessageEntityType["type"], "event">;
-}
 
 export interface AuthService {
 	getCurrentUser(): Promise<User | null>;
