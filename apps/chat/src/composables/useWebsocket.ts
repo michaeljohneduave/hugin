@@ -1,4 +1,4 @@
-import { WebSocketManager } from "@/lib/websocket";
+import { WebSocketManager } from "@/lib/wsClient";
 import { useAuth, useSession } from "@clerk/vue";
 import type { ChatPayload } from "@hugin-bot/core/src/types";
 
