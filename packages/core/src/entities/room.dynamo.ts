@@ -41,6 +41,10 @@ export const RoomEntity = new Entity(
 				},
 				required: true,
 			},
+			status: {
+				type: ["active", "inactive"],
+				required: true,
+			},
 			name: {
 				type: "string",
 				validate: (name) => !name || name.length <= MAX_ROOM_NAME_LENGTH,
