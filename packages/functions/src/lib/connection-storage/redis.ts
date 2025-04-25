@@ -42,15 +42,24 @@ export class RedisConnectionStorage implements ConnectionStorage {
 		]);
 	}
 
-	async addUserToRoom(roomId: string, userId: string): Promise<void> {
-		await this.redis.sadd(`room:${roomId}:members`, [userId]);
+	async addConnIdToRooms(
+		roomIds: string[],
+		connectionId: string,
+	): Promise<void> {
+		const pipeline = this.redis.pipeline();
+
+		for (const roomId of roomIds) {
+			pipeline.sadd(`room:${roomId}:members`, [connectionId]);
+		}
+
+		await pipeline.exec();
 	}
 
-	async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
+	async delConnIdFromRoom(roomId: string, userId: string): Promise<void> {
 		await this.redis.srem(`room:${roomId}:members`, [userId]);
 	}
 
-	async getRoomMembers(roomId: string): Promise<string[]> {
+	async getRoomConnectionIds(roomId: string): Promise<string[]> {
 		return await this.redis.smembers(`room:${roomId}:members`);
 	}
 }

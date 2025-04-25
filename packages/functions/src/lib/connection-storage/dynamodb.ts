@@ -1,4 +1,7 @@
-import { WsConnectionEntity } from "@hugin-bot/core/src/entities/wsConnection.dynamo";
+import {
+	WsConnectionEntity,
+	WsRoomsEntity,
+} from "@hugin-bot/core/src/entities/wsConnection.dynamo";
 import { CONNECTION_TTL_SECONDS, type ConnectionStorage } from "./index";
 
 export class DynamoConnectionStorage implements ConnectionStorage {
@@ -51,51 +54,50 @@ export class DynamoConnectionStorage implements ConnectionStorage {
 		};
 	}
 
-	async removeConnection(connectionId: string, userId: string): Promise<void> {
-		await WsConnectionEntity.delete({
-			userId,
-			connectionId,
-		}).go();
-	}
-
-	async addUserToRoom(
-		roomId: string,
-		userId: string,
-		connectionId: string,
-	): Promise<void> {
-		const now = Date.now();
-		await WsConnectionEntity.upsert({
-			userId,
-			connectionId,
-			roomId,
-			expireAt: Math.floor(now / 1000) + CONNECTION_TTL_SECONDS,
-		}).go();
-	}
-
-	async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
-		const records = await WsConnectionEntity.query
-			.byRoomId({
-				roomId,
-				userId,
+	async removeConnection(connectionId: string): Promise<void> {
+		const rooms = await WsRoomsEntity.query
+			.byConnectionId({
+				connectionId,
 			})
 			.go();
 
-		await WsConnectionEntity.delete(
-			records.data.map((data) => ({
-				userId: data.userId,
-				connectionId: data.connectionId,
+		await WsRoomsEntity.delete(
+			rooms.data.map((room) => ({
+				roomId: room.roomId,
+				connectionId,
 			})),
 		).go();
 	}
 
-	async getRoomMembers(roomId: string): Promise<string[]> {
-		const members = await WsConnectionEntity.query
-			.byRoomId({
+	async addConnIdToRooms(
+		roomIds: string[],
+		connectionId: string,
+	): Promise<void> {
+		await WsRoomsEntity.put(
+			roomIds.map((roomId) => ({
+				roomId,
+				connectionId,
+				expireAt: Math.floor(Date.now() / 1000) + CONNECTION_TTL_SECONDS,
+			})),
+		).go();
+	}
+
+	async delConnIdFromRoom(roomId: string, connectionId: string): Promise<void> {
+		await WsRoomsEntity.remove({
+			roomId,
+			connectionId,
+		}).go();
+	}
+
+	async getRoomConnectionIds(roomId: string): Promise<string[]> {
+		const members = await WsRoomsEntity.query
+			.primary({
 				roomId,
 			})
-			.go();
+			.go({
+				pages: "all",
+			});
 
-		// Get unique userIds from connections
-		return [...new Set(members.data.map((member) => member.userId))];
+		return members.data.map((member) => member.connectionId);
 	}
 }

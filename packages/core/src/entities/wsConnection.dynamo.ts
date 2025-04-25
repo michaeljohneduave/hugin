@@ -14,6 +14,7 @@ import { dynamoConfig } from "../electro";
 // - Room: roomId + userId
 // - User: userId + connectionId + token
 
+// This manages the ws connections of a user
 export const WsConnectionEntity = new Entity(
 	{
 		model: {
@@ -22,17 +23,17 @@ export const WsConnectionEntity = new Entity(
 			service: "hugin",
 		},
 		attributes: {
-			roomId: {
-				type: "string",
-			},
 			userId: {
 				type: "string",
+				required: true,
 			},
 			connectionId: {
 				type: "string",
+				required: true,
 			},
 			token: {
 				type: "string",
+				required: true,
 			},
 			createdAt: {
 				type: "number",
@@ -65,16 +66,52 @@ export const WsConnectionEntity = new Entity(
 					composite: ["userId"],
 				},
 			},
+		},
+	},
+	dynamoConfig,
+);
 
-			byRoomId: {
-				index: "gsi2",
+// This manages the rooms of a user via their connectionIds (multi devices, multi browser)
+export const WsRoomsEntity = new Entity(
+	{
+		model: {
+			entity: "wsRooms",
+			version: "1",
+			service: "hugin",
+		},
+		attributes: {
+			roomId: {
+				type: "string",
+				required: true,
+			},
+			connectionId: {
+				type: "string",
+				required: true,
+			},
+			expireAt: {
+				type: "number",
+			},
+		},
+		indexes: {
+			primary: {
 				pk: {
-					field: "gsi2pk",
+					field: "pk",
 					composite: ["roomId"],
 				},
 				sk: {
-					field: "gsi2sk",
-					composite: ["userId"],
+					field: "sk",
+					composite: ["connectionId"],
+				},
+			},
+			byConnectionId: {
+				index: "gsi1",
+				pk: {
+					field: "gsi1pk",
+					composite: ["connectionId"],
+				},
+				sk: {
+					field: "gsi1sk",
+					composite: ["roomId"],
 				},
 			},
 		},

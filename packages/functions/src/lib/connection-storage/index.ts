@@ -17,20 +17,17 @@ export interface ConnectionStorage {
 	removeConnection(connectionId: string, userId: string): Promise<void>;
 
 	// Room operations
-	addUserToRoom(
-		roomId: string,
-		userId: string,
-		connectionId: string,
-	): Promise<void>;
-	removeUserFromRoom(roomId: string, userId: string): Promise<void>;
-	getRoomMembers(roomId: string): Promise<string[]>;
+	// Add user to room refreshes the tokens to every room joined
+	addConnIdToRooms(roomIds: string[], connectionId: string): Promise<void>;
+	delConnIdFromRoom(roomId: string, connectionId: string): Promise<void>;
+	getRoomConnectionIds(roomId: string): Promise<string[]>;
 
 	// Logging operations - optional
 	enableVerboseLogging?(): void;
 	disableVerboseLogging?(): void;
 }
 
-export const CONNECTION_TTL_SECONDS = 600; // 10 minutes
+export const CONNECTION_TTL_SECONDS = 60 * 30; // 30 minutes
 
 // const redis =
 // 	Resource.Valkey.host === "localhost"
@@ -115,31 +112,30 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		}
 	}
 
-	async addUserToRoom(
-		roomId: string,
-		userId: string,
+	async addConnIdToRooms(
+		roomIds: string[],
 		connectionId: string,
 	): Promise<void> {
 		const start = process.hrtime.bigint();
-		await this.storage.addUserToRoom(roomId, userId, connectionId);
+		await this.storage.addConnIdToRooms(roomIds, connectionId);
 		const end = process.hrtime.bigint();
 		if (this.verboseLogging) {
-			console.log(`addUserToRoom took ${(end - start) / 1_000_000n}ms`);
+			console.log(`addConnIdToRooms took ${(end - start) / 1_000_000n}ms`);
 		}
 	}
 
-	async removeUserFromRoom(roomId: string, userId: string): Promise<void> {
+	async delConnIdFromRoom(roomId: string, connectionId: string): Promise<void> {
 		const start = process.hrtime.bigint();
-		await this.storage.removeUserFromRoom(roomId, userId);
+		await this.storage.delConnIdFromRoom(roomId, connectionId);
 		const end = process.hrtime.bigint();
 		if (this.verboseLogging) {
-			console.log(`removeUserFromRoom took ${(end - start) / 1_000_000n}ms`);
+			console.log(`delConnIdFromRoom took ${(end - start) / 1_000_000n}ms`);
 		}
 	}
 
-	async getRoomMembers(roomId: string): Promise<string[]> {
+	async getRoomConnectionIds(roomId: string): Promise<string[]> {
 		const start = process.hrtime.bigint();
-		const result = await this.storage.getRoomMembers(roomId);
+		const result = await this.storage.getRoomConnectionIds(roomId);
 		const end = process.hrtime.bigint();
 		if (this.verboseLogging) {
 			console.log(`getRoomMembers took ${(end - start) / 1_000_000n}ms`);
