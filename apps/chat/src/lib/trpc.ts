@@ -1,5 +1,5 @@
 import { useSession } from "@clerk/vue";
-import type { AppRouter } from "@hugin-bot/functions/src/lib/trpc";
+import type { AppRouter } from "@hugin-bot/core/src/types";
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 
 export const useTrpc = () => {

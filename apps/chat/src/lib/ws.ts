@@ -1,13 +1,10 @@
-import type {
-	MessagePayload,
-	RoomPayload,
-} from "@hugin-bot/functions/src/lib/types";
+import type { ChatPayload, PingPayload } from "@hugin-bot/core/src/types";
 import { type Ref, ref } from "vue";
 
 export interface WebSocketClient {
 	connect(token: string): void;
 	disconnect(): void;
-	sendMessage(message: MessagePayload): void;
+	sendMessage(message: ChatPayload): void;
 	addMessageHandler(handler: (event: MessageEvent) => void): void;
 	removeMessageHandler(handler: (event: MessageEvent) => void): void;
 	onConnected(callback: () => void): void;
@@ -150,7 +147,7 @@ export class WebSocketManager implements WebSocketClient {
 				const token = await this.getToken();
 
 				if (token) {
-					this.sendMessage({ action: "ping", token });
+					this.sendPing({ action: "ping", token });
 				}
 			}
 		}, this.PING_INTERVAL);
@@ -190,9 +187,15 @@ export class WebSocketManager implements WebSocketClient {
 		}
 	}
 
-	public sendMessage(message: MessagePayload): void {
+	public sendMessage(message: ChatPayload): void {
 		if (this.ws?.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message));
+		}
+	}
+
+	public sendPing(payload: PingPayload): void {
+		if (this.ws?.readyState === WebSocket.OPEN) {
+			this.ws.send(JSON.stringify(payload));
 		}
 	}
 
