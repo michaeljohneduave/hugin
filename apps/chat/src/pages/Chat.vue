@@ -128,7 +128,7 @@ const handleScroll = () => {
 
 const fetchMessages = async (roomId: string) => {
 	try {
-		const { messages, members } = await trpc.messagesByRoom.query({
+		const { messages, members } = await trpc.chats.messagesByRoom.query({
 			roomId,
 		});
 
@@ -181,7 +181,7 @@ const fetchMessages = async (roomId: string) => {
 
 // Function to fetch room members
 const fetchRooms = async () => {
-	const rooms = await trpc.userRooms.query();
+	const rooms = await trpc.chats.userRooms.query();
 	return rooms;
 };
 

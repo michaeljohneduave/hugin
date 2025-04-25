@@ -29,7 +29,7 @@ export type Chat = {
 
 const props = defineProps<{
   currentChatId?: string;
-  rooms: RouterOutput["roomsWithLastMessage"];
+  rooms: RouterOutput["chats"]["roomsWithLastMessage"];
 }>();
 
 const emit = defineEmits<{

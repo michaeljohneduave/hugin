@@ -185,7 +185,7 @@ const notifications = router({
 		}),
 });
 
-export const appRouter = router({
+const chats = router({
 	roomsWithLastMessage: protectedProcedure
 		.input(
 			z.object({
@@ -271,8 +271,12 @@ export const appRouter = router({
 				messages: messages.data,
 			};
 		}),
+});
+
+export const appRouter = router({
 	notifications,
 	giphy,
+	chats,
 });
 
 export const handler = awsLambdaRequestHandler({

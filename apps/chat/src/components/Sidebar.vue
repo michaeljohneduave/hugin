@@ -16,7 +16,7 @@ const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut }
 
 const props = defineProps<{
   currentChatId: string;
-  rooms: RouterOutput["roomsWithLastMessage"];
+  rooms: RouterOutput["chats"]["userRooms"];
   isMobileMenuOpen: boolean;
   isOnline: boolean;
 }>();
