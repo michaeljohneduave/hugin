@@ -4,7 +4,7 @@ import type { ChatPayload, User } from "@hugin-bot/core/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 
 import '@/lib/prism';
 

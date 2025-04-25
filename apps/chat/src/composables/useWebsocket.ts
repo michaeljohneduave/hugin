@@ -1,12 +1,10 @@
-import { WebSocketManager } from "@/lib/ws";
+import { WebSocketManager } from "@/lib/websocket";
 import { useAuth, useSession } from "@clerk/vue";
-import type { MessagePayload } from "@hugin-bot/functions/src/lib/types";
-import { jwtDecode } from "jwt-decode";
-import { watch } from "vue";
+import type { ChatPayload } from "@hugin-bot/core/src/types";
 
 export function useWebsocket() {
 	const ws = WebSocketManager.getInstance();
-	const { session, isLoaded } = useSession();
+	const { session } = useSession();
 	const { getToken } = useAuth();
 
 	// Set up the getToken function for reconnection
@@ -20,10 +18,6 @@ export function useWebsocket() {
 		if (token) {
 			ws.connect(token);
 		}
-
-		ws.onConnected(() => {
-			joinRoom("general");
-		});
 	};
 
 	const joinRoom = (roomId: string) => {
@@ -31,15 +25,18 @@ export function useWebsocket() {
 			return;
 		}
 
-		ws.sendMessage({
-			action: "joinRoom",
-			roomId,
-			timestamp: Date.now(),
-			senderId: session.value?.user.id,
-		});
+		// ws.sendMessage({
+		// 	action: "joinRoom",
+		// 	roomId,
+		// 	createdAt: Date.now(),
+		// 	senderId: session.value?.user.id,
+		// 	type: "event",
+		// 	messageId: crypto.randomUUID(),
+		// 	userId: session.value?.user.id,
+		// });
 	};
 
-	const sendMessage = (message: MessagePayload) => {
+	const sendMessage = (message: ChatPayload) => {
 		ws.sendMessage(message);
 	};
 
@@ -51,23 +48,10 @@ export function useWebsocket() {
 		ws.removeMessageHandler(handler);
 	};
 
-	watch(
-		isLoaded,
-		(newVal, oldVal) => {
-			if (newVal) {
-				connect();
-			} else if (oldVal) {
-				ws.disconnect();
-			}
-		},
-		{
-			immediate: true,
-		},
-	);
-
 	return {
 		isOnline: ws.isConnected(),
 		joinRoom,
+		connect,
 		sendMessage,
 		addMessageHandler,
 		removeMessageHandler,

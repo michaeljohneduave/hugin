@@ -42,5 +42,9 @@ declare module "sst" {
 		export const FIREBASE_CLIENT_EMAIL: {
 			value: string;
 		};
+
+		export const CLERK_SECRET_KEY: {
+			value: string;
+		};
 	}
 }

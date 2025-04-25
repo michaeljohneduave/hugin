@@ -34,7 +34,16 @@ export class WebSocketManager implements WebSocketClient {
 
 	private getToken: (() => Promise<string | null>) | null = null;
 
-	private constructor() {}
+	// Inactivity timer state
+	private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+	private readonly INACTIVITY_THRESHOLD = 1000 * 60 * 5;
+	private isInactive = false;
+
+	private constructor() {
+		// Set up window focus/blur listeners
+		window.addEventListener("focus", this.handleFocus);
+		window.addEventListener("blur", this.handleBlur);
+	}
 
 	public static getInstance(): WebSocketManager {
 		if (!WebSocketManager.instance) {
@@ -42,6 +51,36 @@ export class WebSocketManager implements WebSocketClient {
 		}
 		return WebSocketManager.instance;
 	}
+
+	private handleFocus = () => {
+		console.log("Focus detected");
+		if (this.inactivityTimer) {
+			clearTimeout(this.inactivityTimer);
+			this.inactivityTimer = null;
+		}
+
+		this.isInactive = false;
+
+		// Attempt to reconnect if we're not connected and not already reconnecting
+		if (!this.isOnline.value && !this.isReconnecting && this.getToken) {
+			this.getToken().then((token) => {
+				if (token) {
+					this.connect(token);
+				}
+			});
+		}
+	};
+
+	private handleBlur = () => {
+		console.log("Blur detected");
+		if (!this.inactivityTimer) {
+			this.inactivityTimer = setTimeout(() => {
+				this.isInactive = true;
+				console.log("User is inactive, disconnecting");
+				this.disconnect();
+			}, this.INACTIVITY_THRESHOLD);
+		}
+	};
 
 	public setGetToken(getToken: () => Promise<string | null>): void {
 		this.getToken = getToken;
@@ -52,7 +91,15 @@ export class WebSocketManager implements WebSocketClient {
 			throw new Error("No token provided for WebSocket connection");
 		}
 
+		console.log("Connecting to WebSocket");
+
 		if (this.ws?.readyState === WebSocket.OPEN) {
+			return;
+		}
+
+		// Don't connect if the app is inactive
+		if (this.isInactive) {
+			console.log("Not connecting - app is inactive");
 			return;
 		}
 
@@ -108,7 +155,7 @@ export class WebSocketManager implements WebSocketClient {
 	}
 
 	private handleReconnect() {
-		if (this.isReconnecting) {
+		if (this.isReconnecting || this.isInactive) {
 			return;
 		}
 
@@ -174,6 +221,10 @@ export class WebSocketManager implements WebSocketClient {
 		if (this.reconnectTimeout) {
 			clearTimeout(this.reconnectTimeout);
 			this.reconnectTimeout = null;
+		}
+		if (this.inactivityTimer) {
+			clearTimeout(this.inactivityTimer);
+			this.inactivityTimer = null;
 		}
 	}
 
