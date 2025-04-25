@@ -2,15 +2,13 @@
 import carmyAvatar from "@/assets/carmy-avatar.webp";
 import loebotteAvatar from "@/assets/loebotte-avatar.webp";
 import pearlAvatar from "@/assets/pearl-avatar.webp";
-import Message from "@/components/Message.vue";
-import RoomEvent from '@/components/RoomEvent.vue';
+import MessageComponent from "@/components/Message.vue";
+import RoomEventComponent from '@/components/RoomEvent.vue';
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useSession } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
-import type { MessageEntityType } from "@hugin-bot/core/src/entities/message.dynamo";
-import type { RouterOutput } from "@hugin-bot/functions/src/lib/trpc";
-import type { ChatPayload, RoomPayload } from "@hugin-bot/functions/src/lib/types";
+import type { ChatPayload, User } from "@hugin-bot/core/src/types";
 import {
 	BellIcon,
 	LogOutIcon,
@@ -18,17 +16,11 @@ import {
 	SunIcon,
 	Users as UsersIcon,
 } from "lucide-vue-next";
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import MessageInput from "../components/MessageInput.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
 import { useAuth } from "../composables/useAuth";
 import { useTheme } from '../composables/useTheme';
-import type { User } from "../services/auth";
-
-// Both for regular user and bot
-export type ChatPayloadWithUser = MessageEntityType & {
-	user: User
-}
 
 export type Attachment = {
 	name: string;
@@ -63,85 +55,26 @@ const unknownBot: User = {
 }
 
 // State
+const chatRoomId = ref("");
 const messageInput = ref("");
-const chatMessages = ref<Array<ChatPayloadWithUser>>([]);
-const roomEvents = ref<Array<RoomPayload>>([]);
+const chatMessages = ref<Array<ChatPayload>>([]);
 const showAttachmentMenu = ref(false);
-const selectedFile = ref<File | null>(null);
-const selectedVideoFile = ref<File | null>(null);
-const selectedAudioFile = ref<File | null>(null);
-const isRecording = ref(false);
-const audioRecording = ref<string | null>(null);
-const recordingTime = ref(0);
-const recordingInterval = ref<NodeJS.Timeout | null>(null);
 const messagesContainer = ref<HTMLDivElement | null>(null);
-const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const showMentionSuggestions = ref(false);
-const rooms = ref<RouterOutput["roomsWithLastMessage"]>([]);
-const roomMembers = ref<Record<string, RouterOutput["roomMembers"][number]>>({});
 const showNotificationSettings = ref(false);
-const replyToMessage = ref<ChatPayloadWithUser | null>(null);
+const replyToMessage = ref<ChatPayload | null>(null);
 
 const isMobileMenuOpen = ref(false);
 const isSidebarOpen = ref(false);
-const showUserMenu = ref(false);
-const viewportHeight = ref(window.innerHeight);
-const isKeyboardOpen = ref(false);
+const isScrolledToBottom = ref(true);
 
-// Transform rooms data to match Chat type
-const formattedRooms = computed(() => {
-	return rooms.value.map(room => ({
-		roomId: room.roomId,
-		userId: room.userId,
-		name: room.name,
-		type: (room.type || "group") as "group" | "dm",
-		createdAt: room.createdAt || Date.now(),
-		updatedAt: room.updatedAt || room.createdAt || Date.now(),
-		user: {
-			firstName: room.user?.firstName || "",
-			lastName: room.user?.lastName || "",
-			avatar: room.user?.avatar || "/placeholder.svg?height=80&width=80"
-		},
-		lastMessage: room.lastMessage ? {
-			messageId: room.lastMessage.messageId,
-			action: "message" as const,
-			roomId: room.roomId,
-			type: "user" as const,
-			userId: room.lastMessage.userId,
-			createdAt: room.lastMessage.createdAt,
-			message: room.lastMessage.message,
-			imageFiles: room.lastMessage.imageFiles || [],
-			videoFiles: room.lastMessage.videoFiles || [],
-			audioFiles: room.lastMessage.audioFiles || [],
-		} : undefined
-	}));
-});
-
-// Replace the currentUser ref with auth
 const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();
 const { session } = useSession();
-const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler } = useWebsocket();
+const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler, connect } = useWebsocket();
 const trpc = useTrpc();
-
-// Replace the isDarkMode ref with the composable
 const { isDarkMode, toggleTheme } = useTheme();
 
-// Add currentChatId ref
-const currentChatId = ref("general");
-// Function to fetch room members
-const fetchRoomMembers = async (roomId: string) => {
-	try {
-		const members = await trpc.roomMembers.query({
-			roomId,
-		});
-		updateRoomMembers(members);
-	} catch (error) {
-		console.error('Error fetching room members:', error);
-	}
-};
-
-// Add isScrolledToBottom ref
-const isScrolledToBottom = ref(true);
+const userMap = new Map<string, User>();
 
 // Update scrollToBottom function to be smoother and handle image loading
 const scrollToBottom = (force = false) => {
@@ -193,62 +126,50 @@ const handleScroll = () => {
 	isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 100;
 };
 
-// Function to fetch messages for a room
 const fetchMessages = async (roomId: string) => {
 	try {
-		const messages = await trpc.messagesByRoom.query({
+		const { messages, members } = await trpc.messagesByRoom.query({
 			roomId,
 		});
-		// TODOS: Clean up this transformation
-		// Transform messages to match ChatPayload type
-		chatMessages.value = messages.filter(msg => msg.type !== "event").map(msg => {
-			if (msg.type === "llm") {
-				return {
-					messageId: msg.messageId,
-					action: "message" as const,
-					userId: msg.userId,
-					roomId: currentChatId.value,
-					createdAt: msg.createdAt,
-					type: "llm" as const,
-					...(msg.message ? { message: msg.message } : {
-						imageFiles: msg.imageFiles || [],
-						videoFiles: msg.videoFiles || [],
-						audioFiles: msg.audioFiles || []
-					}),
-					user: availableBots.find(bot => bot.id === msg.userId) || unknownBot,
-					replyToMessageId: msg.replyToMessageId,
-					threadId: msg.threadId,
+
+		const msgs: ChatPayload[] = [];
+		for (const msg of messages) {
+			let user: User;
+
+			if (msg.type === "event" || msg.type === "user") {
+				if (userMap.has(msg.userId)) {
+					user = userMap.get(msg.userId)!;
+				} else {
+					const member = members.find(m => m.userId === msg.userId);
+
+					if (member) {
+						user = {
+							id: member.userId,
+							name: `${member.user.firstName} ${member.user.lastName}`,
+							avatar: member.user.avatar,
+							type: msg.type,
+						}
+						userMap.set(msg.userId, user);
+					} else {
+						user = {
+							id: msg.userId,
+							name: "Unknown",
+							type: msg.type,
+						}
+					}
 				}
+
+			} else {
+				user = availableBots.find(bot => bot.id === msg.userId) || unknownBot;
 			}
 
-			const user = roomMembers.value[msg.userId];
+			msgs.push({
+				...msg,
+				user,
+			})
+		}
 
-			return {
-				messageId: msg.messageId,
-				action: "message" as const,
-				userId: msg.userId,
-				roomId: currentChatId.value,
-				createdAt: msg.createdAt,
-				type: "user" as const,
-				...(msg.message ? { message: msg.message } : {
-					imageFiles: msg.imageFiles || [],
-					videoFiles: msg.videoFiles || [],
-					audioFiles: msg.audioFiles || []
-				}),
-				user: user,
-				replyToMessageId: msg.replyToMessageId,
-				threadId: msg.threadId,
-			}
-		})
-
-		roomEvents.value = messages.filter(msg => msg.type === "event").map(msg => ({
-			action: msg.action as "joinRoom" | "leaveRoom",
-			senderId: msg.userId,
-			messageId: msg.messageId,
-			roomId: currentChatId.value,
-			timestamp: new Date(msg.createdAt).getTime(),
-			type: "event",
-		}));
+		chatMessages.value = msgs;
 
 		// Wait for Vue to update the DOM before scrolling
 		await nextTick();
@@ -258,120 +179,70 @@ const fetchMessages = async (roomId: string) => {
 	}
 };
 
-// Handle file upload
-const handleFileUpload = (event: Event) => {
-	const inputElement = event.target as HTMLInputElement;
-
-	if (inputElement.files && inputElement.files.length > 0) {
-		const file = inputElement.files[0];
-		const fileType = file.type.split('/')[0];
-
-		switch (fileType) {
-			case 'image':
-				selectedFile.value = file;
-				break;
-			case 'video':
-				selectedVideoFile.value = file;
-				break;
-			case 'audio':
-				selectedAudioFile.value = file;
-				break;
-			default:
-				alert('Unsupported file type. Please upload an image, video, or audio file.');
-				return;
-		}
-		showAttachmentMenu.value = false;
-	}
+// Function to fetch room members
+const fetchRooms = async () => {
+	const rooms = await trpc.userRooms.query();
+	return rooms;
 };
 
-// Remove selected file
-const removeFile = (type: 'image' | 'video' | 'audio') => {
-	switch (type) {
-		case 'image':
-			selectedFile.value = null;
-			break;
-		case 'video':
-			selectedVideoFile.value = null;
-			break;
-		case 'audio':
-			selectedAudioFile.value = null;
-			break;
-	}
-};
-
-// Update the watch for chatMessages
-watch(chatMessages, (newMessages, oldMessages) => {
-	// Only scroll if new messages were added
-	if (newMessages.length > oldMessages.length) {
-		// Force scroll on user's own messages
-		const lastMessage = newMessages[newMessages.length - 1];
-		const isOwnMessage = lastMessage.userId === currentUser.value?.id;
-		scrollToBottom(isOwnMessage);
-	}
-}, { deep: true });
-
-// Watch for room changes and fetch messages
-watch(currentChatId, (newRoomId) => {
-	fetchMessages(newRoomId);
-});
-
-// When receiving a message, handle it based on type
 const handleWebSocketMessage = (event: MessageEvent) => {
-	const data = JSON.parse(event.data) as MessageEntityType | RoomPayload;
-	console.log("data", data, roomMembers.value);
+	const data = JSON.parse(event.data) as ChatPayload;
+	chatMessages.value.push(data);
 
 	if (data.action === 'message') {
-		const messageData = data;
-		switch (messageData.type) {
-			case "llm":
-				chatMessages.value.push({
-					...messageData,
-					user: availableBots.find(bot => bot.id === messageData.userId) || unknownBot,
-				});
-				break;
-			case "user":
-				chatMessages.value.push({
-					...messageData,
-					user: roomMembers.value[messageData.userId],
-				});
-				break;
-		}
-		scrollToBottom();
-	} else if (data.action === "joinRoom" || data.action === "leaveRoom") {
-		const eventData = data as RoomPayload;
-		roomEvents.value.push(eventData);
 		scrollToBottom();
 	}
 };
 
-// Update WebSocket message handler
-onMounted(async () => {
-	if (window?.matchMedia("(prefers-color-scheme: dark)").matches) {
-		isDarkMode.value = true;
-		document.documentElement.classList.add("dark");
+const handleReplyToMessage = (message: ChatPayload) => {
+	replyToMessage.value = message;
+	// Focus the message input
+	nextTick(() => {
+		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+		if (textarea) textarea.focus();
+	});
+};
+
+const handleCancelReply = () => {
+	replyToMessage.value = null;
+};
+
+// When sending a message, include the replyToMessageId if replying
+const handleSendMessage = (message: ChatPayload) => {
+	if (replyToMessage.value) {
+		message.replyToMessageId = replyToMessage.value.messageId;
+		message.threadId = replyToMessage.value.threadId;
+		replyToMessage.value = null;
 	}
 
-	// Add WebSocket message handler
-	addMessageHandler(handleWebSocketMessage);
+	sendSocketMsg(message);
+};
 
-	// Add scroll event listener
-	messagesContainer.value?.addEventListener('scroll', handleScroll);
+const handleShowAttachmentMenu = (event: MouseEvent) => {
+	const target = event.target as HTMLElement;
+	// Close attachment menu if clicking outside
+	if (showAttachmentMenu.value && !target.closest("button")) {
+		showAttachmentMenu.value = false;
+	}
+}
 
-	// Fetch initial room members and messages
-	await Promise.all([
-		fetchRoomMembers(currentChatId.value),
-		fetchMessages(currentChatId.value)
-	]);
+const handleLogout = async () => {
+	try {
+		await signOut();
+	} catch (error) {
+		console.error("Error logging out:", error);
+	}
+};
 
-	// Initial scroll to bottom
+watch(chatMessages.value, () => {
 	scrollToBottom(true);
 });
 
-// Clean up WebSocket on unmount
-onUnmounted(() => {
-	removeMessageHandler(handleWebSocketMessage);
-	messagesContainer.value?.removeEventListener('scroll', handleScroll);
-});
+// watch(chatRoomId, (oldRoomId, newRoomId) => {
+// 	if ( oldRoomId !== newRoomId) {
+// 		fetchMessages(newRoomId);
+// 	}
+// });
 
 // Check for @mentions
 watch(messageInput, (newValue) => {
@@ -387,128 +258,42 @@ watch(messageInput, (newValue) => {
 	}
 });
 
-// Insert mention into message input
-const insertMention = (llm: User) => {
-	const lastAtIndex = messageInput.value.lastIndexOf("@");
-	if (lastAtIndex !== -1) {
-		const beforeAt = messageInput.value.slice(0, lastAtIndex);
-		messageInput.value = `${beforeAt}@${llm.name} `;
-	}
-	showMentionSuggestions.value = false;
-
-	// Focus back on the textarea
-	nextTick(() => {
-		textareaRef.value?.focus();
-	});
-};
-
-// Close dropdowns when clicking outside
-onMounted(async () => {
-	document.addEventListener("click", (event: MouseEvent) => {
-		const target = event.target as HTMLElement;
-		// Close attachment menu if clicking outside
-		if (showAttachmentMenu.value && !target.closest("button")) {
-			showAttachmentMenu.value = false;
-		}
-	});
-});
-
-watch(session, async (val) => {
+watch(session, (val) => {
 	if (val?.user) {
-		const res = await trpc.roomsWithLastMessage.query({
-			userId: val.user.id,
-		});
-
-		rooms.value = res;
-
-		// If we have rooms, select the first one
-		if (res.length > 0) {
-			currentChatId.value = res[0].roomId;
-			await fetchRoomMembers(res[0].roomId);
-			await fetchMessages(res[0].roomId);
-		}
+		connect();
 	}
 }, {
 	once: true,
 })
 
-// Add logout handler
-const handleLogout = async () => {
-	try {
-		await signOut();
-	} catch (error) {
-		console.error("Error logging out:", error);
+watch(isOnline, async (newVal) => {
+	if (newVal) {
+		const rooms = await fetchRooms();
+		if (rooms.length > 0) {
+			chatRoomId.value = rooms[0].roomId;
+			await fetchMessages(rooms[0].roomId);
+		}
 	}
-};
+})
 
-// Add with other refs
-
-// Add to script section with other onMounted hooks
 onMounted(() => {
-	// Close dropdown when clicking outside
-	document.addEventListener('click', (event: MouseEvent) => {
-		const target = event.target as HTMLElement;
-		if (showUserMenu.value && !target.closest('.relative')) {
-			showUserMenu.value = false;
-		}
-	});
+	if (window?.matchMedia("(prefers-color-scheme: dark)").matches) {
+		isDarkMode.value = true;
+		document.documentElement.classList.add("dark");
+	}
 
-	// Handle viewport height changes (keyboard open/close)
-	window.addEventListener('resize', () => {
-		viewportHeight.value = window.innerHeight;
-		// If viewport height decreased significantly, keyboard is likely open
-		isKeyboardOpen.value = window.innerHeight < window.outerHeight * 0.8;
-	});
+	addMessageHandler(handleWebSocketMessage);
+	document.addEventListener("click", handleShowAttachmentMenu);
+	messagesContainer.value?.addEventListener('scroll', handleScroll);
 
-	// Handle mobile browser chrome (address bar) showing/hiding
-	window.addEventListener('scroll', () => {
-		if (window.scrollY > 0) {
-			document.documentElement.style.setProperty('--vh', `${window.innerHeight}px`);
-		}
-	});
+	scrollToBottom(true);
 });
 
-// Add to script section with other onUnmounted hooks
 onUnmounted(() => {
-	window.removeEventListener('resize', () => { });
-	window.removeEventListener('scroll', () => { });
+	removeMessageHandler(handleWebSocketMessage);
+	messagesContainer.value?.removeEventListener('scroll', handleScroll);
+	document.removeEventListener("click", handleShowAttachmentMenu);
 });
-
-// Function to update room members
-const updateRoomMembers = (members: RouterOutput["roomMembers"]) => {
-	const updatedMembers: Record<string, RouterOutput["roomMembers"][number]> = {};
-	for (const member of members) {
-		updatedMembers[member.id] = member;
-	}
-	roomMembers.value = updatedMembers;
-};
-
-// Handle message reply
-const handleReplyToMessage = (message: ChatPayloadWithUser) => {
-	replyToMessage.value = message;
-	// Focus the message input
-	nextTick(() => {
-		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
-		if (textarea) textarea.focus();
-	});
-};
-
-// Cancel a reply
-const cancelReply = () => {
-	replyToMessage.value = null;
-};
-
-// When sending a message, include the replyToMessageId if replying
-const handleSendMessage = (message: ChatPayload) => {
-	if (replyToMessage.value) {
-		message.replyToMessageId = replyToMessage.value.messageId;
-		message.threadId = replyToMessage.value.threadId;
-		replyToMessage.value = null;
-	}
-
-	sendSocketMsg(message);
-};
-
 </script>
 
 <template>
@@ -545,7 +330,7 @@ const handleSendMessage = (message: ChatPayload) => {
 				</div> -->
 
 				<div class="flex-1 flex items-center justify-between">
-					<h2 class="text-lg font-medium">{{ currentChatId }}</h2>
+					<h2 class="text-lg font-medium">{{ chatRoomId }}</h2>
 
 					<!-- User actions -->
 					<div class="flex items-center space-x-2">
@@ -605,22 +390,18 @@ const handleSendMessage = (message: ChatPayload) => {
 
 				<!-- Message list -->
 				<template v-for="(message, index) in chatMessages" :key="message.messageId">
-					<Message v-if="message.type === 'llm' || message.type === 'user'" :message="message" :index="index"
+					<MessageComponent v-if="message.type === 'llm' || message.type === 'user'" :message="message" :index="index"
 						:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
 						@reply-to-message="handleReplyToMessage" />
-				</template>
-
-				<!-- Room events -->
-				<template v-for="event in roomEvents" :key="event.messageId">
-					<RoomEvent :event="event" :members="roomMembers" :currentUserId="currentUser?.id" />
+					<RoomEventComponent v-else :event="message" :index="index" :messages="chatMessages" />
 				</template>
 			</div>
 
 			<!-- Input area -->
 			<div class="flex-shrink-0">
-				<MessageInput :currentUser="currentUser" :currentChatId="currentChatId" :availableBots="availableBots"
+				<MessageInput :currentUser="currentUser" :currentChatId="chatRoomId" :availableBots="availableBots"
 					:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
-					@cancelReply="cancelReply" />
+					@cancelReply="handleCancelReply" />
 			</div>
 		</div>
 	</div>
