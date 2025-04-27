@@ -2,6 +2,8 @@
 @import "./theme.css";
 @import "./base.css";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Base styles */
 html {
 	@apply antialiased;
@@ -50,13 +52,13 @@ audio {
 }
 
 /* Focus styles */
-*:focus-visible {
-	@apply outline-none ring-2 ring-primary-500 ring-offset-2;
+/* *:focus-visible {
+	@apply outline-none ring-1 ring-primary-500 ring-offset-1;
 }
 
 .dark *:focus-visible {
 	@apply ring-offset-gray-900;
-}
+} */
 
 /* Message bubbles */
 .message-bubble {
@@ -189,4 +191,12 @@ audio {
 /* Custom dark gray for dark mode */
 .dark .bg-gray-850 {
 	background-color: #1a1a1a;
+}
+
+.dark textarea::placeholder {
+	@apply text-primary-foreground;
+}
+
+textarea::placeholder {
+	@apply text-primary;
 }

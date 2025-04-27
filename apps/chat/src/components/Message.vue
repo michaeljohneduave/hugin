@@ -28,6 +28,7 @@ const touchCurrentX = ref(0);
 const isSliding = ref(false);
 const slideThreshold = 80; // pixels needed to trigger reply
 const isHovered = ref(false);
+const isMessageCodeBlock = ref(false);
 
 const emit = defineEmits<{
   replyToMessage: [message: ChatPayload];
@@ -234,6 +235,11 @@ const renderContent = computed(() => {
 
   // For user messages, keep existing behavior but ensure links open in new tab
   const parts = parseCodeBlocks(sanitizedInput);
+
+  if (parts.length === 1 && parts[0].type === 'code') {
+    isMessageCodeBlock.value = true;
+  }
+
   const html = parts.map(part => {
     if (part.type === 'code' && part.language) {
       return createCodeBlockHtml(part.content, part.language);
@@ -412,12 +418,12 @@ onMounted(() => {
       </div>
 
       <!-- Message content with slide transform -->
-      <div
-        class="max-w-[75vw] sm:max-w-[75vw] md:max-w-[65vw] lg:max-w-3xl rounded-lg px-2 py-1 relative transition-transform"
-        :style="{ transform: slideTransform }" :class="[
+      <div class="max-w-[70vw] md:max-w-[75vw] rounded-lg transition-transform" :style="{ transform: slideTransform }"
+        :class="[
           isUser
-            ? 'bg-primary text-primary-foreground'
+            ? 'bg-indigo-600 text-primary-foreground'
             : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
+          (message.imageFiles?.length ?? 0 > 0) || isMessageCodeBlock ? 'p-0' : 'px-2 py-1',
           // Adjust corners based on position in group
           isFirstInGroup ? 'rounded-lg' : '',
           !isFirstInGroup ? 'rounded-lg' : '',
@@ -439,7 +445,8 @@ onMounted(() => {
               <polyline points="9 14 4 9 9 4"></polyline>
               <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
             </svg>
-            <span class="font-medium" :class="isUser ? 'text-primary-foreground/80' : 'text-primary/80'">
+            <span class="font-medium"
+              :class="isUser ? 'text-primary-foreground/80' : 'text-primary/80 dark:text-primary-foreground/80'">
               {{ repliedMessage.user?.name ?? repliedMessage.userId }}
             </span>
           </div>
@@ -453,8 +460,7 @@ onMounted(() => {
         </div>
 
         <!-- Message text -->
-        <div v-if="message.message" class="text break-words prose dark:prose-invert max-w-none prose-sm"
-          v-html="renderContent"></div>
+        <div v-if="message.message" class="text break-words max-w-none prose-sm" v-html="renderContent"></div>
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">
@@ -468,7 +474,7 @@ onMounted(() => {
       <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
-          " :class="isHovered ? 'opacity-100' : 'opacity-0'">
+          " :class="[isHovered ? 'opacity-100' : 'opacity-0']">
         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="9 14 4 9 9 4"></polyline>
@@ -492,8 +498,8 @@ onMounted(() => {
 
 /* Code block styles */
 :deep(.code-block) {
-  margin: 0.5rem 0;
-  padding: 1rem;
+  /* margin: 0.5rem 0;
+  padding: 1rem; */
   border-radius: 0.5rem;
   background-color: var(--prism-background, #1e1e1e);
   overflow-x: auto;

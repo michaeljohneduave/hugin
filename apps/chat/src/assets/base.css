@@ -1,3 +1,4 @@
+@plugin "@tailwindcss/typography";
 @layer base {
 	h1 {
 		font-size: var(--text-2xl);
@@ -32,15 +33,15 @@
 		list-style-type: disc;
 	}
 
-	li {
+	/* li {
 		margin-left: 1.5rem;
-	}
+	} */
 
 	ol {
 		list-style-type: decimal;
 	}
 
-	ol li {
+	/* ol li {
 		margin-left: 1.5rem;
-	}
+	} */
 }

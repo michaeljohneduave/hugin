@@ -103,163 +103,49 @@ onMounted(() => {
 </script>
 
 <template>
-	<div class="gif-picker" :class="{ 'dark': isDarkMode }">
+	<div class="w-full bg-white dark:bg-gray-800 rounded-lg overflow-hidden flex flex-col">
 		<!-- Search header -->
-		<div class="gif-picker-header">
-			<div class="search-container">
-				<SearchIcon class="search-icon" />
-				<input v-model="searchQuery" type="text" placeholder="Search GIFs..." class="search-input" />
+		<div class="p-1">
+			<div class="relative flex items-center">
+				<SearchIcon class="absolute left-3 w-4 h-4 text-gray-400" />
+				<input v-model="searchQuery" type="text" placeholder="Search GIFs..."
+					class="w-full py-2 pl-9 pr-3 border border-gray-200 dark:border-gray-700 rounded-md text-sm bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 focus:outline-none focus:border-blue-500 focus:ring focus:ring-blue-500 focus:ring-opacity-50" />
 			</div>
 		</div>
 
 		<!-- GIFs grid -->
-		<div class="gif-grid">
-			<div v-if="isLoading" class="loading">
+		<div class="h-80 overflow-y-auto p-3 grid grid-cols-2 md:grid-cols-3 gap-2 relative auto-rows-min">
+			<div v-if="isLoading"
+				class="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 bg-inherit">
 				Loading...
 			</div>
-			<div v-else-if="gifs.length === 0" class="no-results">
+			<div v-else-if="gifs.length === 0"
+				class="absolute inset-0 flex items-center justify-center text-gray-500 dark:text-gray-400 bg-inherit">
 				No GIFs found
 			</div>
 			<template v-else>
-				<div v-for="gif in gifs" :key="gif.id" class="gif-item" @click="selectGif(gif)">
-					<img :src="gif.images.fixed_width.url" :alt="gif.title" loading="lazy" />
+				<div v-for="gif in gifs" :key="gif.id"
+					class="relative aspect-square cursor-pointer rounded overflow-hidden bg-gray-100 dark:bg-gray-700 w-full hover:opacity-80"
+					@click="selectGif(gif)">
+					<img :src="gif.images.fixed_width.url" :alt="gif.title" loading="lazy"
+						class="absolute inset-0 w-full h-full object-cover" />
 				</div>
 			</template>
 		</div>
 	</div>
 </template>
 
-<style scoped>
-.gif-picker {
-	width: 320px;
-	background: white;
-	border-radius: 8px;
-	overflow: hidden;
-	display: flex;
-	flex-direction: column;
-	border: 1px solid #e5e7eb;
-	box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
-}
-
-.dark .gif-picker {
-	background: #1f2937;
-	border-color: #374151;
-}
-
-.gif-picker-header {
-	padding: 12px;
-	border-bottom: 1px solid #e5e7eb;
-}
-
-.dark .gif-picker-header {
-	border-color: #374151;
-}
-
-.search-container {
-	position: relative;
-	display: flex;
-	align-items: center;
-}
-
-.search-icon {
-	position: absolute;
-	left: 12px;
-	width: 16px;
-	height: 16px;
-	color: #9ca3af;
-}
-
-.search-input {
-	width: 100%;
-	padding: 8px 12px 8px 36px;
-	border: 1px solid #e5e7eb;
-	border-radius: 6px;
-	font-size: 14px;
-	background: white;
-	color: #111827;
-}
-
-.dark .search-input {
-	background: #111827;
-	border-color: #4b5563;
-	color: #f9fafb;
-}
-
-.search-input:focus {
-	outline: none;
-	border-color: #3b82f6;
-	ring: 2px solid #3b82f6;
-}
-
-.gif-grid {
-	height: 320px;
-	overflow-y: auto;
-	padding: 12px;
-	display: grid;
-	grid-template-columns: repeat(2, 1fr);
-	gap: 8px;
-	position: relative;
-	grid-auto-rows: min-content;
-}
-
-.gif-item {
-	position: relative;
-	aspect-ratio: 1;
-	cursor: pointer;
-	border-radius: 4px;
-	overflow: hidden;
-	background: #f3f4f6;
-	width: 100%;
-}
-
-.dark .gif-item {
-	background: #374151;
-}
-
-.gif-item img {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 100%;
-	height: 100%;
-	object-fit: cover;
-}
-
-.gif-item:hover {
-	opacity: 0.8;
-}
-
-.loading,
-.no-results {
-	position: absolute;
-	top: 0;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: #6b7280;
-	background: inherit;
-}
-
-.dark .loading,
-.dark .no-results {
-	color: #9ca3af;
-}
-
-/* Mobile styles */
+<style>
+/* Mobile styles that are hard to implement with Tailwind alone */
 @media (max-width: 768px) {
-	.gif-picker {
+	.gif-picker-mobile {
 		width: 100%;
 		height: 50vh;
-		border-radius: 16px 16px 0 0;
+		border-radius: 1rem 1rem 0 0;
 	}
 
-	.gif-grid {
+	.gif-grid-mobile {
 		height: calc(50vh - 73px);
-		grid-template-columns: repeat(3, 1fr);
-		grid-auto-rows: min-content;
 	}
 }
 </style>

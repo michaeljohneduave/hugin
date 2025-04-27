@@ -17,6 +17,7 @@ import {
 	Users as UsersIcon,
 } from "lucide-vue-next";
 import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { version } from '../../package.json';
 import MessageInput from "../components/MessageInput.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
 import { useAuth } from "../composables/useAuth";
@@ -63,10 +64,12 @@ const messagesContainer = ref<HTMLDivElement | null>(null);
 const showMentionSuggestions = ref(false);
 const showNotificationSettings = ref(false);
 const replyToMessage = ref<ChatPayload | null>(null);
+const isLoadingMessages = ref(true);
 
 const isMobileMenuOpen = ref(false);
 const isSidebarOpen = ref(false);
 const isScrolledToBottom = ref(true);
+const isUserMenuOpen = ref(false);
 
 const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();
 const { session } = useSession();
@@ -128,6 +131,7 @@ const handleScroll = () => {
 
 const fetchMessages = async (roomId: string) => {
 	try {
+		isLoadingMessages.value = true;
 		const { messages, members } = await trpc.chats.messagesByRoom.query({
 			roomId,
 		});
@@ -176,6 +180,8 @@ const fetchMessages = async (roomId: string) => {
 		scrollToBottom(true);
 	} catch (error) {
 		console.error('Error fetching messages:', error);
+	} finally {
+		isLoadingMessages.value = false;
 	}
 };
 
@@ -226,6 +232,8 @@ const handleSendMessage = (message: ChatPayload) => {
 		message.replyToMessageId = replyToMessage.value.messageId;
 		message.threadId = replyToMessage.value.threadId;
 		replyToMessage.value = null;
+	} else {
+		message.replyToMessageId = undefined;
 	}
 
 	sendSocketMsg(message);
@@ -281,10 +289,18 @@ watch(session, (val) => {
 
 watch(isOnline, async (newVal) => {
 	if (newVal) {
-		const rooms = await fetchRooms();
-		if (rooms.length > 0) {
-			chatRoomId.value = rooms[0].roomId;
-			await fetchMessages(rooms[0].roomId);
+		try {
+			const rooms = await fetchRooms();
+			if (rooms.length > 0) {
+				chatRoomId.value = rooms[0].roomId;
+				await fetchMessages(rooms[0].roomId);
+			} else {
+				// No rooms available
+				isLoadingMessages.value = false;
+			}
+		} catch (error) {
+			console.error('Error fetching rooms:', error);
+			isLoadingMessages.value = false;
 		}
 	}
 })
@@ -317,23 +333,10 @@ onUnmounted(() => {
 		<div class="text-red-500">Error: {{ authError.message }}</div>
 	</div>
 	<div v-else class="h-[var(--vh,100vh)] bg-gray-100 dark:bg-gray-900">
-		<!-- Sidebar -->
-		<div class="fixed inset-0 z-40 transform md:relative md:translate-x-0 transition-transform duration-300 ease-in-out"
-			:class="[isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full']">
-			<!-- Sidebar backdrop -->
-			<!-- <div class="absolute inset-0 bg-gray-900/50 md:hidden" @click="isMobileMenuOpen = false"></div> -->
-
-			<!-- Sidebar content -->
-			<!-- <Sidebar :currentChatId="currentChatId" :rooms="formattedRooms" :isMobileMenuOpen="isMobileMenuOpen"
-				:isOnline="isOnline" @selectChat="handleChatSelect" @createNewAiChat="handleCreateNewAiChat"
-				@toggleMobileMenu="isMobileMenuOpen = !isMobileMenuOpen" /> -->
-		</div>
-
 		<!-- Main content -->
 		<div class="flex-1 flex flex-col h-[var(--vh,100vh)]">
 			<!-- Chat header -->
-			<div
-				class="flex-shrink-0 h-16 flex items-center justify-between px-4 border-b dark:border-gray-700 bg-white dark:bg-gray-800">
+			<div class="flex-shrink-0 h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
 				<!-- <div class="flex items-center">
 					<button class="md:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
 						@click="isMobileMenuOpen = !isMobileMenuOpen">
@@ -343,35 +346,56 @@ onUnmounted(() => {
 				</div> -->
 
 				<div class="flex-1 flex items-center justify-between">
-					<h2 class="text-lg font-medium">{{ chatRoomId }}</h2>
+					<div class="flex items-center space-x-2">
+						<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
+						<span class="text-sm text-gray-500 dark:text-gray-300">v{{ version }}</span>
+					</div>
 
 					<!-- User actions -->
 					<div class="flex items-center space-x-2">
-						<!-- Theme toggle -->
-						<button @click="toggleTheme" class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-							<SunIcon v-if="isDarkMode" class="h-5 w-5" />
-							<MoonIcon v-else class="h-5 w-5" />
-						</button>
+						<!-- Dropdown menu -->
+						<div class="relative">
+							<button @click="isUserMenuOpen = !isUserMenuOpen"
+								class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+								<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
+									stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+								</svg>
+							</button>
 
-						<!-- Notifications -->
-						<button @click="showNotificationSettings = true"
-							class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-							<BellIcon class="h-5 w-5" />
-						</button>
+							<!-- Dropdown content -->
+							<div v-if="isUserMenuOpen"
+								class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50">
+								<div class="py-1">
+									<!-- Notifications -->
+									<button @click="showNotificationSettings = true; isUserMenuOpen = false"
+										class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+										<BellIcon class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
+										Notifications
+									</button>
 
-						<!-- User menu -->
-						<button @click="handleLogout"
-							class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 text-red-500">
-							<LogOutIcon class="h-5 w-5" />
-						</button>
+									<!-- Dark mode toggle -->
+									<button @click="toggleTheme(); isUserMenuOpen = false"
+										class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+										<SunIcon v-if="isDarkMode" class="h-5 w-5 mr-2 text-amber-500" />
+										<MoonIcon v-else class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
+										{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
+									</button>
+
+									<!-- Divider -->
+									<hr class="my-1 border-gray-200 dark:border-gray-700">
+
+									<!-- Logout -->
+									<button @click="handleLogout(); isUserMenuOpen = false"
+										class="flex items-center w-full px-4 py-2 text-left text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+										<LogOutIcon class="h-5 w-5 mr-2" />
+										Logout
+									</button>
+								</div>
+							</div>
+						</div>
 					</div>
 				</div>
-
-				<!-- Mobile user list button -->
-				<button class="md:hidden p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full"
-					@click="isSidebarOpen = !isSidebarOpen">
-					<UsersIcon class="h-5 w-5" />
-				</button>
 			</div>
 
 			<!-- Notification Settings Modal -->
@@ -392,9 +416,30 @@ onUnmounted(() => {
 			</div>
 
 			<!-- Messages area -->
-			<div ref="messagesContainer" class="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
-				<!-- Show loading or no messages state -->
-				<div v-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
+			<div ref="messagesContainer" class="flex-1 overflow-y-auto pl-4 pr-2 py-2 space-y-4 min-h-0">
+				<!-- Loading messages state -->
+				<div v-if="isLoadingMessages" class="flex justify-center items-center h-full">
+					<div class="flex flex-col items-center text-gray-500 dark:text-gray-400">
+						<svg class="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor"
+								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+							</path>
+						</svg>
+						<p>Loading chat...</p>
+					</div>
+				</div>
+
+				<!-- No room selected state (only shown when we've confirmed there are no rooms) -->
+				<div v-else-if="!chatRoomId && !isLoadingMessages" class="flex justify-center items-center h-full">
+					<div class="text-center text-gray-500 dark:text-gray-400">
+						<p class="text-lg">No chat room available</p>
+						<p class="text-sm">Create a room to start chatting</p>
+					</div>
+				</div>
+
+				<!-- Empty room state -->
+				<div v-else-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
 					<div class="text-center text-gray-500 dark:text-gray-400">
 						<p class="text-lg">No messages yet</p>
 						<p class="text-sm">Send a message to start the conversation</p>

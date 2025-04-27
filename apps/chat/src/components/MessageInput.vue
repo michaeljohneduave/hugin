@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
+import { useDeviceDetection } from '@/composables/useDeviceDetection';
 import type { Bot } from '@/pages/Chat.vue';
 import type { ChatPayload, User } from '@hugin-bot/core/src/types';
 import {
@@ -43,6 +44,9 @@ const audioRecording = ref<string | null>(null);
 const showBotSuggestions = ref(false);
 const taggedBot = ref<Bot | null>(null);
 const selectedBotIndex = ref(0); // Track currently selected bot in the dropdown
+
+// Get mobile detection from the composable
+const { isMobile } = useDeviceDetection();
 
 // Auto-resize textarea
 const autoResize = () => {
@@ -145,6 +149,22 @@ const handleInput = (event: Event) => {
   autoResize();
 };
 
+// Hide pickers when input field is clicked
+const hidePickers = () => {
+  showEmojiPicker.value = false;
+  showGifPicker.value = false;
+
+  // On mobile, ensure the textarea stays visible when keyboard appears
+  nextTick(() => {
+    if (isMobile.value && textareaRef.value) {
+      // Small delay to let the keyboard appear
+      setTimeout(() => {
+        textareaRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
+  });
+};
+
 // Handle keyboard navigation for bot suggestions
 const handleKeydown = (event: KeyboardEvent) => {
   if (!showBotSuggestions.value) {
@@ -242,6 +262,8 @@ const sendMessage = () => {
   selectedAudioFile.value = null;
   audioRecording.value = null;
 
+  hidePickers();
+
   // Reset textarea height
   nextTick(() => {
     if (textareaRef.value) {
@@ -269,8 +291,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-2 sm:p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
-    <form @submit.prevent="sendMessage" class="flex flex-col space-y-2">
+  <div class="p-2 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+    <form @submit.prevent="sendMessage" class="flex flex-col" :class="[
+      props.replyTo ? 'space-y-1' : ''
+    ]">
       <!-- File previews -->
       <div v-if="selectedFile || selectedVideoFile || selectedAudioFile || audioRecording" class="flex flex-wrap gap-2">
         <FilePreview v-if="selectedFile" :fileName="selectedFile.name" @remove="removeFile('image')" />
@@ -282,9 +306,8 @@ onUnmounted(() => {
       <!-- Reply preview -->
       <div v-if="props.replyTo" class="flex items-center bg-gray-100 dark:bg-gray-700 p-2 rounded-lg">
         <div class="flex-1 flex items-center min-w-0">
-          <div class="w-1 h-full bg-primary mr-2 flex-shrink-0"></div>
-          <div class="flex-1 min-w-0">
-            <div class="text-xs font-medium truncate">
+          <div class="ml-1 flex-1 min-w-0">
+            <div class="text-xs font-medium truncate dark:text-primary-foreground">
               Replying to {{ props.replyTo.user?.name ?? props.replyTo.userId }}
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400 truncate">
@@ -327,8 +350,8 @@ onUnmounted(() => {
 
         <div class="flex-1 relative">
           <textarea v-model="messageInput" rows="1" placeholder="Type a message..."
-            class="w-full px-3 py-2 text-base border dark:border-gray-600 rounded-lg bg-transparent focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-            @input="handleInput" @keydown="handleKeydown" ref="textareaRef"></textarea>
+            class="w-full px-3 py-2 text-base border dark:text-primary-foreground dark:border-gray-600 rounded-lg bg-transparent focus:outline-none resize-none"
+            @input="handleInput" @keydown="handleKeydown" ref="textareaRef" @focus="hidePickers"></textarea>
 
           <!-- Bot suggestions dropdown -->
           <div v-if="showBotSuggestions"
@@ -342,41 +365,64 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="relative">
-          <button type="button" @click="showEmojiPicker = !showEmojiPicker"
-            class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <SmileIcon class="h-5 w-5" />
-          </button>
+        <button type="button" @click="showEmojiPicker = !showEmojiPicker; showGifPicker = false"
+          class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+          :class="{ 'bg-gray-100 dark:bg-gray-700': showEmojiPicker }">
+          <SmileIcon class="h-5 w-5" />
+        </button>
 
-          <div v-if="showEmojiPicker" class="absolute bottom-12 right-0 z-50">
-            <div class="fixed inset-0" @click="showEmojiPicker = false"></div>
-            <div class="relative">
-              <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700">
-                <EmojiPicker :dark="isDarkMode" @select="insertEmoji" />
-              </div>
-            </div>
-          </div>
-        </div>
+        <button type="button" @click="showGifPicker = !showGifPicker; showEmojiPicker = false"
+          class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+          :class="{ 'bg-gray-100 dark:bg-gray-700': showGifPicker }">
+          <span class="font-semibold">GIF</span>
+        </button>
 
-        <div class="relative">
-          <button type="button" @click="showGifPicker = !showGifPicker"
-            class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-            <span class="font-semibold">GIF</span>
-          </button>
-
-          <!-- GIF Picker -->
-          <div v-show="showGifPicker" class="md:hidden fixed bottom-0 left-0 right-0 z-50">
-            <div class="fixed inset-0 bg-black/20 dark:bg-black/40" @click="showGifPicker = false"></div>
-            <div class="relative">
-              <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
-            </div>
-          </div>
-        </div>
         <button type="submit" class="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
           :disabled="!messageInput.trim() && !selectedFile && !selectedVideoFile && !selectedAudioFile && !audioRecording">
           <SendIcon class="h-5 w-5" />
         </button>
       </div>
+
+      <!-- Unified picker container that appears below the input -->
+      <transition name="slide-down">
+        <div v-if="showEmojiPicker || showGifPicker" class="mt-2 rounded-lg bg-white dark:bg-gray-800">
+          <!-- Emoji Picker -->
+          <div v-if="showEmojiPicker">
+            <EmojiPicker native :theme="isDarkMode ? 'dark' : 'light'" @select="insertEmoji" hideSearch />
+          </div>
+
+          <!-- GIF Picker -->
+          <div v-if="showGifPicker">
+            <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
+          </div>
+        </div>
+      </transition>
     </form>
   </div>
 </template>
+
+<style>
+/* Correctly integrate emoji picker with the container */
+.v3-emoji-picker {
+  box-shadow: none !important;
+  border: none !important;
+  width: 100% !important;
+  max-height: 300px !important;
+}
+
+/* Slide down transition animation */
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.3s ease;
+  max-height: 500px;
+  opacity: 1;
+  overflow: hidden;
+}
+
+.slide-down-enter-from,
+.slide-down-leave-to {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+}
+</style>
