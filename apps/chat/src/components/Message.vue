@@ -464,8 +464,11 @@ onMounted(() => {
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">
-          <div v-for="(image, index) in message.imageFiles" :key="index" class="rounded-lg overflow-hidden">
-            <img :src="image" class="max-w-[300px] max-h-[300px] object-contain rounded-lg" loading="lazy" />
+          <div v-for="(image, index) in message.imageFiles" :key="index"
+            class="rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-700"
+            style="min-height: 100px; min-width: 100px; aspect-ratio: 16/9;">
+            <img :src="image" class="max-w-[300px] max-h-[300px] object-contain rounded-lg w-full h-full"
+              loading="eager" />
           </div>
         </div>
       </div>

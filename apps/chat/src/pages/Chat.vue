@@ -66,8 +66,6 @@ const showNotificationSettings = ref(false);
 const replyToMessage = ref<ChatPayload | null>(null);
 const isLoadingMessages = ref(true);
 
-const isMobileMenuOpen = ref(false);
-const isSidebarOpen = ref(false);
 const isScrolledToBottom = ref(true);
 const isUserMenuOpen = ref(false);
 
@@ -83,38 +81,47 @@ const userMap = new Map<string, User>();
 const scrollToBottom = (force = false) => {
 	nextTick(() => {
 		if (messagesContainer.value && (isScrolledToBottom.value || force)) {
-			// Get the last message's image if it exists
-			const lastMessage = messagesContainer.value.lastElementChild;
-			if (lastMessage) {
-				const lastImage = lastMessage.querySelector('img');
-				if (lastImage) {
-					// Wait for the last image to load before scrolling
-					if (lastImage.complete) {
-						messagesContainer.value.scrollTo({
+			// Check for all images in the container
+			const allImages = messagesContainer.value.querySelectorAll('img');
+
+			if (allImages.length > 0) {
+				// Count how many images are still loading
+				let loadingImagesCount = 0;
+				let loadedImagesCount = 0;
+
+				// Function to scroll after all images are loaded
+				const scrollAfterImagesLoad = () => {
+					loadedImagesCount++;
+					if (loadedImagesCount >= loadingImagesCount) {
+						messagesContainer.value?.scrollTo({
 							top: messagesContainer.value.scrollHeight,
 							behavior: 'smooth'
 						});
-					} else {
-						lastImage.onload = () => {
-							messagesContainer.value?.scrollTo({
-								top: messagesContainer.value.scrollHeight,
-								behavior: 'smooth'
-							});
-						};
-						lastImage.onerror = () => {
-							messagesContainer.value?.scrollTo({
-								top: messagesContainer.value.scrollHeight,
-								behavior: 'smooth'
-							});
-						};
 					}
-				} else {
-					// If no image in last message, scroll immediately
+				};
+
+				// Check all images
+				for (const img of allImages) {
+					if (!img.complete) {
+						loadingImagesCount++;
+						img.onload = scrollAfterImagesLoad;
+						img.onerror = scrollAfterImagesLoad;
+					}
+				}
+
+				// If no images are still loading, scroll immediately
+				if (loadingImagesCount === 0) {
 					messagesContainer.value.scrollTo({
 						top: messagesContainer.value.scrollHeight,
 						behavior: 'smooth'
 					});
 				}
+			} else {
+				// No images, scroll immediately
+				messagesContainer.value.scrollTo({
+					top: messagesContainer.value.scrollHeight,
+					behavior: 'smooth'
+				});
 			}
 		}
 	});
@@ -247,6 +254,14 @@ const handleShowAttachmentMenu = (event: MouseEvent) => {
 	}
 }
 
+const handleOutsideClick = (event: MouseEvent) => {
+	const target = event.target as HTMLElement;
+	// Close user menu if clicking outside
+	if (isUserMenuOpen.value && !target.closest('.user-menu-container')) {
+		isUserMenuOpen.value = false;
+	}
+}
+
 const handleLogout = async () => {
 	try {
 		await signOut();
@@ -306,13 +321,9 @@ watch(isOnline, async (newVal) => {
 })
 
 onMounted(() => {
-	if (window?.matchMedia("(prefers-color-scheme: dark)").matches) {
-		isDarkMode.value = true;
-		document.documentElement.classList.add("dark");
-	}
-
 	addMessageHandler(handleWebSocketMessage);
 	document.addEventListener("click", handleShowAttachmentMenu);
+	document.addEventListener("click", handleOutsideClick);
 	messagesContainer.value?.addEventListener('scroll', handleScroll);
 
 	scrollToBottom(true);
@@ -322,6 +333,7 @@ onUnmounted(() => {
 	removeMessageHandler(handleWebSocketMessage);
 	messagesContainer.value?.removeEventListener('scroll', handleScroll);
 	document.removeEventListener("click", handleShowAttachmentMenu);
+	document.removeEventListener("click", handleOutsideClick);
 });
 </script>
 
@@ -354,7 +366,7 @@ onUnmounted(() => {
 					<!-- User actions -->
 					<div class="flex items-center space-x-2">
 						<!-- Dropdown menu -->
-						<div class="relative">
+						<div class="relative user-menu-container">
 							<button @click="isUserMenuOpen = !isUserMenuOpen"
 								class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
 								<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
