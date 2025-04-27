@@ -7,7 +7,7 @@ import type { Bot } from '@/pages/Chat.vue';
 import type { ChatPayload, User } from '@hugin-bot/core/src/types';
 import {
   File as FileIcon,
-  Plus as PlusIcon,
+  Search as SearchIcon,
   Send as SendIcon,
   Smile as SmileIcon,
 } from "lucide-vue-next";
@@ -30,9 +30,10 @@ const emit = defineEmits<{
 // Input state
 const messageInput = ref("");
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
-const showAttachmentMenu = ref(false);
+const showFunctionButtons = ref(false);
 const showEmojiPicker = ref(false);
 const showGifPicker = ref(false);
+const showFileUploadUI = ref(false);
 
 // File attachments
 const selectedFile = ref<File | null>(null);
@@ -53,13 +54,31 @@ const autoResize = () => {
   const textarea = textareaRef.value;
   if (!textarea) return;
 
+  // Reset height to calculate proper scrollHeight
   textarea.style.height = "auto";
-  textarea.style.height = `${textarea.scrollHeight}px`;
+
+  // Get line height to calculate lines worth of height
+  const computedStyle = window.getComputedStyle(textarea);
+  const lineHeight = Number.parseInt(computedStyle.lineHeight) || 20; // fallback to 20px if not specified
+  const maxHeight = lineHeight * 6; // Increased from 3 to 6 lines
+
+  // Set height with maximum limit
+  const newHeight = Math.min(textarea.scrollHeight, maxHeight);
+  textarea.style.height = `${newHeight}px`;
+
+  // Add overflow scrolling if content exceeds max height
+  textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
 };
 
-// Toggle attachment menu
-const toggleAttachmentMenu = () => {
-  showAttachmentMenu.value = !showAttachmentMenu.value;
+// Toggle function buttons container
+const toggleFunctionButtons = () => {
+  showFunctionButtons.value = !showFunctionButtons.value;
+  // Hide everything when toggling off
+  if (!showFunctionButtons.value) {
+    showEmojiPicker.value = false;
+    showGifPicker.value = false;
+    showFileUploadUI.value = false;
+  }
 };
 
 // Handle file upload
@@ -84,7 +103,7 @@ const handleFileUpload = (event: Event) => {
         alert('Unsupported file type. Please upload an image, video, or audio file.');
         return;
     }
-    showAttachmentMenu.value = false;
+    showFunctionButtons.value = false;
   }
 };
 
@@ -149,26 +168,10 @@ const handleInput = (event: Event) => {
   autoResize();
 };
 
-// Hide pickers when input field is clicked
-const hidePickers = () => {
-  showEmojiPicker.value = false;
-  showGifPicker.value = false;
-
-  // On mobile, ensure the textarea stays visible when keyboard appears
-  nextTick(() => {
-    if (isMobile.value && textareaRef.value) {
-      // Small delay to let the keyboard appear
-      setTimeout(() => {
-        textareaRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 300);
-    }
-  });
-};
-
 // Handle keyboard navigation for bot suggestions
 const handleKeydown = (event: KeyboardEvent) => {
   if (!showBotSuggestions.value) {
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (event.key === 'Enter' && event.shiftKey) {
       event.preventDefault();
       sendMessage();
     }
@@ -214,6 +217,31 @@ const selectBot = (bot: Bot) => {
     textareaRef.value?.focus();
     const length = messageInput.value.length;
     textareaRef.value?.setSelectionRange(length, length);
+  });
+};
+
+// Show specific picker
+const showPicker = (pickerType: 'emoji' | 'gif' | 'file') => {
+  showEmojiPicker.value = pickerType === 'emoji';
+  showGifPicker.value = pickerType === 'gif';
+  showFileUploadUI.value = pickerType === 'file';
+};
+
+// Hide pickers when input field is clicked
+const hidePickers = () => {
+  showEmojiPicker.value = false;
+  showGifPicker.value = false;
+  showFileUploadUI.value = false;
+  showFunctionButtons.value = false;
+
+  // On mobile, ensure the textarea stays visible when keyboard appears
+  nextTick(() => {
+    if (isMobile.value && textareaRef.value) {
+      // Small delay to let the keyboard appear
+      setTimeout(() => {
+        textareaRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 300);
+    }
   });
 };
 
@@ -268,16 +296,17 @@ const sendMessage = () => {
   nextTick(() => {
     if (textareaRef.value) {
       textareaRef.value.style.height = 'auto';
+      textareaRef.value.focus();
     }
   });
 };
 
 // Add click outside handler
-const attachmentMenuRef = ref<HTMLDivElement | null>(null);
+const functionButtonsRef = ref<HTMLDivElement | null>(null);
 
 const handleClickOutside = (event: MouseEvent) => {
-  if (attachmentMenuRef.value && !attachmentMenuRef.value.contains(event.target as Node)) {
-    showAttachmentMenu.value = false;
+  if (functionButtonsRef.value && !functionButtonsRef.value.contains(event.target as Node)) {
+    showFunctionButtons.value = false;
   }
 };
 
@@ -291,7 +320,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-2 bg-white dark:bg-gray-800 border-t dark:border-gray-700">
+  <div class="p-1.5 bg-white dark:bg-gray-800 dark:border-gray-700">
     <form @submit.prevent="sendMessage" class="flex flex-col" :class="[
       props.replyTo ? 'space-y-1' : ''
     ]">
@@ -328,29 +357,17 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- Input with attachments row -->
+      <!-- Input with search button -->
       <div class="flex items-center space-x-2">
-        <button type="button" @click.stop="toggleAttachmentMenu"
-          class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-          <PlusIcon class="h-5 w-5" />
+        <button type="button" @click.stop="toggleFunctionButtons"
+          class="rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+          :class="{ 'bg-gray-100 dark:bg-gray-700': showFunctionButtons }">
+          <SearchIcon class="h-5 w-5" />
         </button>
 
-        <!-- Attachment menu popup -->
-        <div v-if="showAttachmentMenu" ref="attachmentMenuRef"
-          class="absolute bottom-20 left-4 sm:left-72 bg-white dark:bg-gray-800 rounded-md shadow-lg z-10 border dark:border-gray-700">
-          <div class="py-1">
-            <label
-              class="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
-              <FileIcon class="h-4 w-4 mr-2" />
-              <span>Upload file</span>
-              <input type="file" class="hidden" @change="handleFileUpload" />
-            </label>
-          </div>
-        </div>
-
-        <div class="flex-1 relative">
+        <div class="flex-1 relative flex flex-col">
           <textarea v-model="messageInput" rows="1" placeholder="Type a message..."
-            class="w-full px-3 py-2 text-base border dark:text-primary-foreground dark:border-gray-600 rounded-lg bg-transparent focus:outline-none resize-none"
+            class="placeholder-text w-full h-full px-2 py-2 text-sm border dark:text-primary-foreground dark:border-gray-600 rounded-lg bg-transparent focus:outline-none resize-none max-h-textarea overflow-y-auto"
             @input="handleInput" @keydown="handleKeydown" ref="textareaRef" @focus="hidePickers"></textarea>
 
           <!-- Bot suggestions dropdown -->
@@ -365,35 +382,63 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <button type="button" @click="showEmojiPicker = !showEmojiPicker; showGifPicker = false"
-          class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-          :class="{ 'bg-gray-100 dark:bg-gray-700': showEmojiPicker }">
-          <SmileIcon class="h-5 w-5" />
-        </button>
-
-        <button type="button" @click="showGifPicker = !showGifPicker; showEmojiPicker = false"
-          class="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-          :class="{ 'bg-gray-100 dark:bg-gray-700': showGifPicker }">
-          <span class="font-semibold">GIF</span>
-        </button>
-
-        <button type="submit" class="p-2 rounded-full bg-primary text-primary-foreground hover:bg-primary/90"
+        <button type="submit" class="pr-1 pb-1 rounded-full text-primary dark:text-blue-400"
           :disabled="!messageInput.trim() && !selectedFile && !selectedVideoFile && !selectedAudioFile && !audioRecording">
           <SendIcon class="h-5 w-5" />
         </button>
       </div>
 
-      <!-- Unified picker container that appears below the input -->
+      <!-- Unified container with buttons and pickers -->
       <transition name="slide-down">
-        <div v-if="showEmojiPicker || showGifPicker" class="mt-2 rounded-lg bg-white dark:bg-gray-800">
-          <!-- Emoji Picker -->
-          <div v-if="showEmojiPicker">
-            <EmojiPicker native :theme="isDarkMode ? 'dark' : 'light'" @select="insertEmoji" hideSearch />
+        <div v-if="showFunctionButtons" class="mt-2 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700">
+          <!-- Function buttons - always visible when container is open -->
+          <div class="p-2 flex justify-around dark:border-gray-700">
+            <button type="button" @click="showPicker('emoji')" class="function-button"
+              :class="{ 'active': showEmojiPicker }">
+              <SmileIcon class="h-6 w-6" />
+              <span class="text-xs mt-1">Emoji</span>
+            </button>
+            <button type="button" @click="showPicker('gif')" class="function-button"
+              :class="{ 'active': showGifPicker }">
+              <div class="h-6 w-6 flex items-center justify-center">
+                <span class="font-semibold">GIF</span>
+              </div>
+              <span class="text-xs mt-1">GIF</span>
+            </button>
+            <button type="button" @click="showPicker('file')" class="function-button"
+              :class="{ 'active': showFileUploadUI }">
+              <FileIcon class="h-6 w-6" />
+              <span class="text-xs mt-1">File</span>
+            </button>
           </div>
 
-          <!-- GIF Picker -->
-          <div v-if="showGifPicker">
-            <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
+          <!-- Content area below buttons -->
+          <div>
+            <!-- Emoji Picker -->
+            <div v-show="showEmojiPicker">
+              <EmojiPicker native :theme="isDarkMode ? 'dark' : 'light'" @select="insertEmoji" hideSearch />
+            </div>
+
+            <!-- GIF Picker -->
+            <div v-show="showGifPicker">
+              <GifPicker :isDarkMode="isDarkMode" @select="selectAndSendGif" />
+            </div>
+
+            <!-- File Upload WIP UI -->
+            <div v-show="showFileUploadUI" class="p-4">
+              <div class="flex flex-col items-center justify-center">
+                <FileIcon class="h-12 w-12 text-gray-400 dark:text-gray-500 mb-2" />
+                <h3 class="text-lg font-medium text-gray-700 dark:text-gray-300">Upload File</h3>
+                <p class="text-sm text-gray-500 dark:text-gray-400 mt-1 text-center">
+                  Drag and drop a file here, or click to select a file
+                </p>
+                <label
+                  class="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 cursor-pointer">
+                  <span>Select File</span>
+                  <input type="file" class="hidden" @change="handleFileUpload" />
+                </label>
+              </div>
+            </div>
           </div>
         </div>
       </transition>
@@ -410,6 +455,61 @@ onUnmounted(() => {
   max-height: 300px !important;
 }
 
+/* Textarea max height (increased to approximately 6 lines) */
+.max-h-textarea {
+  max-height: calc(1.5em * 6);
+  /* Assumes line-height of approximately 1.5em */
+  /* Hide scrollbar but keep scroll functionality */
+  scrollbar-width: none;
+  /* Firefox */
+  -ms-overflow-style: none;
+  /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.max-h-textarea::-webkit-scrollbar {
+  width: 4px;
+  background-color: transparent;
+}
+
+.max-h-textarea::-webkit-scrollbar-thumb {
+  background-color: rgba(155, 155, 155, 0.5);
+  border-radius: 4px;
+}
+
+/* Function buttons styling for consistent appearance */
+.function-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 8px;
+  color: rgba(107, 114, 128, 1);
+  transition: background-color 0.2s ease;
+}
+
+.dark .function-button {
+  color: rgba(156, 163, 175, 1);
+}
+
+.function-button:hover {
+  background-color: rgba(243, 244, 246, 1);
+}
+
+.dark .function-button:hover {
+  background-color: rgba(55, 65, 81, 1);
+}
+
+.function-button.active {
+  background-color: rgba(229, 231, 235, 1);
+}
+
+.dark .function-button.active {
+  background-color: rgba(75, 85, 99, 1);
+}
+
 /* Slide down transition animation */
 .slide-down-enter-active,
 .slide-down-leave-active {
@@ -424,5 +524,9 @@ onUnmounted(() => {
   max-height: 0;
   opacity: 0;
   overflow: hidden;
+}
+
+.placeholder-text::placeholder {
+  font-size: .875rem;
 }
 </style>
