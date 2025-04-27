@@ -43,8 +43,9 @@ const audioRecording = ref<string | null>(null);
 
 // Add bot-related state
 const showBotSuggestions = ref(false);
+const filteredBots = ref<Bot[]>(props.availableBots);
 const taggedBot = ref<Bot | null>(null);
-const selectedBotIndex = ref(0); // Track currently selected bot in the dropdown
+const selectedBotIndex = ref(-1); // Track currently selected bot in the dropdown
 
 // Get mobile detection from the composable
 const { isMobile } = useDeviceDetection();
@@ -159,10 +160,45 @@ const handleInput = (event: Event) => {
   const textarea = event.target as HTMLTextAreaElement;
   const text = textarea.value;
   const lastChar = text[textarea.selectionStart - 1];
+  let lastWord = "";
 
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (text[i] !== " ") {
+      lastWord = text[i] + lastWord;
+    } else {
+      break;
+    }
+  }
+
+  // Naive and temp implementation of tagging
+  // will rework this in the future with better handling of bot and user tags
+  // Currently, it only handles tags on end of the message
   if (lastChar === '@') {
     showBotSuggestions.value = true;
-    selectedBotIndex.value = 0; // Reset selection when showing suggestions
+    filteredBots.value = props.availableBots;
+    selectedBotIndex.value = 0;
+  } else if (lastWord) {
+    if (lastWord.startsWith("@")) {
+      lastWord = lastWord.replace("@", "")
+    }
+
+    const filtered = props.availableBots.filter(bot => {
+      return bot.name.toLowerCase().startsWith(lastWord);
+    })
+
+    console.log(filtered, lastWord);
+
+    if (filtered.length) {
+      filteredBots.value = filtered;
+      showBotSuggestions.value = true;
+      selectedBotIndex.value = 0;
+    } else {
+      selectedBotIndex.value = -1;
+      showBotSuggestions.value = false;
+      filteredBots.value = [];
+    }
+  } else {
+    showBotSuggestions.value = false;
   }
 
   autoResize();
@@ -179,9 +215,23 @@ const handleKeydown = (event: KeyboardEvent) => {
   }
 
   switch (event.key) {
+    case 'ArrowUp':
+      event.preventDefault();
+      selectedBotIndex.value = (selectedBotIndex.value - 1 + filteredBots.value.length) % filteredBots.value.length;
+      break;
+    case 'ArrowDown':
+      event.preventDefault();
+      selectedBotIndex.value = (selectedBotIndex.value + 1) % filteredBots.value.length;
+      break;
     case 'Enter':
       event.preventDefault();
-      sendMessage();
+
+      if (showBotSuggestions.value) {
+        selectBot(filteredBots.value[selectedBotIndex.value]);
+      } else {
+        sendMessage();
+      }
+
       break;
     case 'Escape':
       event.preventDefault();
@@ -192,11 +242,23 @@ const handleKeydown = (event: KeyboardEvent) => {
 
 // Handle bot selection
 const selectBot = (bot: Bot) => {
+  let lastWord = "";
+
+  for (let i = messageInput.value.length - 1; i >= 0; i--) {
+    if (messageInput.value[i] !== " ") {
+      lastWord = messageInput.value[i] + lastWord;
+    } else {
+      break;
+    }
+  }
+
+  messageInput.value = messageInput.value.replace(lastWord, `@${bot.name} `)
+
   const beforeCursor = messageInput.value.slice(0, textareaRef.value?.selectionStart || 0);
   const afterCursor = messageInput.value.slice(textareaRef.value?.selectionStart || 0);
 
   // Replace the @ with the bot tag using template literals
-  messageInput.value = `${beforeCursor.slice(0, -1)}@${bot.name} ${afterCursor}`;
+  // messageInput.value = `${beforeCursor.slice(0, -1)}@${bot.name} ${afterCursor}`;
   taggedBot.value = bot;
   showBotSuggestions.value = false;
 
@@ -296,6 +358,10 @@ const handleClickOutside = (event: MouseEvent) => {
   if (functionButtonsRef.value && !functionButtonsRef.value.contains(event.target as Node)) {
     showFunctionButtons.value = false;
   }
+
+  if (showBotSuggestions.value) {
+    showBotSuggestions.value = false;
+  }
 };
 
 onMounted(() => {
@@ -361,8 +427,9 @@ onUnmounted(() => {
           <!-- Bot suggestions dropdown -->
           <div v-if="showBotSuggestions"
             class="absolute bottom-full left-0 mb-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 max-h-48 overflow-y-auto">
-            <div v-for="(bot, index) in availableBots" :key="bot.id" @click="selectBot(bot)"
-              class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+            <div v-for="(bot, index) in filteredBots" :key="bot.id" @click="selectBot(bot)"
+              class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
+              :class="{ 'bg-gray-100 dark:bg-gray-700': index !== selectedBotIndex }">
               <img :src="bot.avatar" class="w-6 h-6 rounded-full mr-2 object-cover" alt="" />
               <span class="text-gray-900 dark:text-gray-100">{{ bot.name }}</span>
             </div>
