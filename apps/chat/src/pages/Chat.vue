@@ -359,8 +359,16 @@ onUnmounted(() => {
 
 				<div class="flex-1 flex items-center justify-between">
 					<div class="flex items-center space-x-2">
-						<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
-						<span class="text-sm text-gray-500 dark:text-gray-300">v{{ version }}</span>
+						<div class="flex flex-col">
+							<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
+							<span class="text-xs text-gray-400 dark:text-gray-500 -mt-1">v{{ version }}</span>
+						</div>
+						<div class="flex items-center">
+							<span class="inline-flex h-2 w-2 rounded-full mr-1"
+								:class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
+							<span class="text-xs text-gray-500 dark:text-gray-400">{{ isOnline ? 'Connected' : 'Disconnected'
+							}}</span>
+						</div>
 					</div>
 
 					<!-- User actions -->
