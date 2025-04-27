@@ -1,6 +1,6 @@
 {
   "name": "chat",
-  "version": "0.1.5",
+  "version": "0.1.15",
   "private": true,
   "type": "module",
   "scripts": {

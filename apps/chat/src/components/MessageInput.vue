@@ -171,7 +171,7 @@ const handleInput = (event: Event) => {
 // Handle keyboard navigation for bot suggestions
 const handleKeydown = (event: KeyboardEvent) => {
   if (!showBotSuggestions.value) {
-    if (event.key === 'Enter' && event.shiftKey) {
+    if (event.key === 'Enter' && !event.shiftKey) {
       event.preventDefault();
       sendMessage();
     }
@@ -389,7 +389,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Unified container with buttons and pickers -->
-      <transition name="slide-down">
+      <transition name="slide-down" persisted>
         <div v-if="showFunctionButtons" class="mt-2 rounded-lg bg-white dark:bg-gray-800 dark:border-gray-700">
           <!-- Function buttons - always visible when container is open -->
           <div class="p-2 flex justify-around dark:border-gray-700">
