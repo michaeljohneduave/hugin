@@ -179,21 +179,9 @@ const handleKeydown = (event: KeyboardEvent) => {
   }
 
   switch (event.key) {
-    case 'ArrowUp':
-      event.preventDefault();
-      selectedBotIndex.value = (selectedBotIndex.value - 1 + props.availableBots.length) % props.availableBots.length;
-      break;
-    case 'ArrowDown':
-      event.preventDefault();
-      selectedBotIndex.value = (selectedBotIndex.value + 1) % props.availableBots.length;
-      break;
     case 'Enter':
       event.preventDefault();
-      if (showBotSuggestions.value) {
-        selectBot(props.availableBots[selectedBotIndex.value]);
-      } else {
-        sendMessage();
-      }
+      sendMessage();
       break;
     case 'Escape':
       event.preventDefault();
@@ -374,8 +362,7 @@ onUnmounted(() => {
           <div v-if="showBotSuggestions"
             class="absolute bottom-full left-0 mb-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 max-h-48 overflow-y-auto">
             <div v-for="(bot, index) in availableBots" :key="bot.id" @click="selectBot(bot)"
-              class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"
-              :class="{ 'bg-gray-100 dark:bg-gray-700': index === selectedBotIndex }">
+              class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
               <img :src="bot.avatar" class="w-6 h-6 rounded-full mr-2 object-cover" alt="" />
               <span class="text-gray-900 dark:text-gray-100">{{ bot.name }}</span>
             </div>
