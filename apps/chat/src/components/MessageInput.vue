@@ -239,7 +239,7 @@ const hidePickers = () => {
     if (isMobile.value && textareaRef.value) {
       // Small delay to let the keyboard appear
       setTimeout(() => {
-        textareaRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        textareaRef.value?.scrollIntoView({ behavior: 'instant', block: 'center' });
       }, 300);
     }
   });

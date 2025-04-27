@@ -370,7 +370,7 @@ onMounted(() => {
     { 'items-end': isUser },
     { 'items-start': !isUser },
     isFirstInGroup ? 'mt-4' : 'mt-0.5',
-    isLastInGroup ? 'mb-4' : 'mb-0.5'
+    isLastInGroup ? '' : 'mb-0.5'
   ]" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
     <!-- Timestamp separator -->
     <div v-if="showTimestamp" class="flex justify-center w-full my-2">

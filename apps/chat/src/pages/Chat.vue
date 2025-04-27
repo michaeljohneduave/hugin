@@ -95,7 +95,7 @@ const scrollToBottom = (force = false) => {
 					if (loadedImagesCount >= loadingImagesCount) {
 						messagesContainer.value?.scrollTo({
 							top: messagesContainer.value.scrollHeight,
-							behavior: 'smooth'
+							behavior: 'instant'
 						});
 					}
 				};
@@ -113,14 +113,14 @@ const scrollToBottom = (force = false) => {
 				if (loadingImagesCount === 0) {
 					messagesContainer.value.scrollTo({
 						top: messagesContainer.value.scrollHeight,
-						behavior: 'smooth'
+						behavior: 'instant'
 					});
 				}
 			} else {
 				// No images, scroll immediately
 				messagesContainer.value.scrollTo({
 					top: messagesContainer.value.scrollHeight,
-					behavior: 'smooth'
+					behavior: 'instant'
 				});
 			}
 		}
@@ -344,19 +344,11 @@ onUnmounted(() => {
 	<div v-else-if="authError" class="flex h-screen items-center justify-center">
 		<div class="text-red-500">Error: {{ authError.message }}</div>
 	</div>
-	<div v-else class="h-[var(--vh,100vh)] bg-gray-100 dark:bg-gray-900">
+	<div v-else class="h-dvh bg-gray-100 dark:bg-gray-900">
 		<!-- Main content -->
-		<div class="flex-1 flex flex-col h-[var(--vh,100vh)]">
+		<div class="h-dvh flex flex-col">
 			<!-- Chat header -->
-			<div class="flex-shrink-0 h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
-				<!-- <div class="flex items-center">
-					<button class="md:hidden p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-						@click="isMobileMenuOpen = !isMobileMenuOpen">
-						<MenuIcon v-if="!isMobileMenuOpen" class="h-6 w-6" />
-						<XIcon v-else class="h-6 w-6" />
-					</button>
-				</div> -->
-
+			<div class="h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
 				<div class="flex-1 flex items-center justify-between">
 					<div class="flex items-center space-x-2">
 						<div class="flex flex-col">
@@ -476,7 +468,7 @@ onUnmounted(() => {
 			</div>
 
 			<!-- Input area -->
-			<div class="flex-shrink-0">
+			<div class="">
 				<MessageInput :currentUser="currentUser" :currentChatId="chatRoomId" :availableBots="availableBots"
 					:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
 					@cancelReply="handleCancelReply" />
