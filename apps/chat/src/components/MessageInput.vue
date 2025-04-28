@@ -170,6 +170,8 @@ const handleInput = (event: Event) => {
     }
   }
 
+  lastWord = lastWord.toLowerCase();
+
   // Naive and temp implementation of tagging
   // will rework this in the future with better handling of bot and user tags
   // Currently, it only handles tags on end of the message
@@ -185,8 +187,6 @@ const handleInput = (event: Event) => {
     const filtered = props.availableBots.filter(bot => {
       return bot.name.toLowerCase().startsWith(lastWord);
     })
-
-    console.log(filtered, lastWord);
 
     if (filtered.length) {
       filteredBots.value = filtered;
@@ -252,13 +252,8 @@ const selectBot = (bot: Bot) => {
     }
   }
 
-  messageInput.value = messageInput.value.replace(lastWord, `@${bot.name} `)
-
-  const beforeCursor = messageInput.value.slice(0, textareaRef.value?.selectionStart || 0);
-  const afterCursor = messageInput.value.slice(textareaRef.value?.selectionStart || 0);
-
   // Replace the @ with the bot tag using template literals
-  // messageInput.value = `${beforeCursor.slice(0, -1)}@${bot.name} ${afterCursor}`;
+  messageInput.value = messageInput.value.replace(lastWord, `@${bot.name} `)
   taggedBot.value = bot;
   showBotSuggestions.value = false;
 
