@@ -4,36 +4,31 @@ import { clerkPlugin } from "@clerk/vue";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
-import { initializeClerk } from "./lib/clerk";
+import { WebSocketManager } from "./lib/wsClient";
 import router from "./router";
 
-// Initialize Clerk before mounting the app
-initializeClerk()
-	.then(() => {
-		const app = createApp(App);
+WebSocketManager.getInstance();
 
-		// Initialize Clerk
-		const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
-		app.use(clerkPlugin, { publishableKey: clerkPubKey });
+const app = createApp(App);
 
-		// Use router
-		app.use(router);
+// Initialize Clerk
+const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+app.use(clerkPlugin, { publishableKey: clerkPubKey });
 
-		// Initialize Vue Query
-		app.use(VueQueryPlugin, {
-			queryClient: new QueryClient({
-				defaultOptions: {
-					queries: {
-						staleTime: 1000 * 60 * 5, // 5 minutes
-						gcTime: 1000 * 60 * 30, // 30 minutes
-						retry: 1,
-					},
-				},
-			}),
-		});
+// Use router
+app.use(router);
 
-		app.mount("#app");
-	})
-	.catch((error) => {
-		console.error("Failed to initialize Clerk:", error);
-	});
+// Initialize Vue Query
+app.use(VueQueryPlugin, {
+	queryClient: new QueryClient({
+		defaultOptions: {
+			queries: {
+				staleTime: 1000 * 60 * 5, // 5 minutes
+				gcTime: 1000 * 60 * 30, // 30 minutes
+				retry: 1,
+			},
+		},
+	}),
+});
+
+app.mount("#app");

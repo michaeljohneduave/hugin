@@ -1,3 +1,5 @@
+import { useSession } from "@clerk/vue";
+import { watch } from "vue";
 import {
 	type NavigationGuardNext,
 	type RouteLocationNormalized,
@@ -5,9 +7,7 @@ import {
 	createWebHistory,
 } from "vue-router";
 import LoginPage from "../components/LoginPage.vue";
-import { useAuth } from "../composables/useAuth";
 import Chat from "../pages/Chat.vue";
-import { getAuthService } from "../services/auth";
 
 const router = createRouter({
 	history: createWebHistory(),
@@ -15,6 +15,7 @@ const router = createRouter({
 		{
 			path: "/",
 			component: Chat,
+
 			meta: { requiresAuth: true },
 		},
 		{
@@ -31,20 +32,15 @@ router.beforeEach(
 		from: RouteLocationNormalized,
 		next: NavigationGuardNext,
 	) => {
-		const { user, isLoading } = useAuth();
-		const authService = getAuthService();
+		const { isSignedIn, isLoaded } = useSession();
+
+		if (!isLoaded.value) {
+			await waitForClerkToLoad();
+		}
 
 		try {
-			// Wait for auth to be initialized
-			await authService.waitForInitialization();
-
-			// Check if user is authenticated
-			const isAuthenticated = await authService.isAuthenticated();
-			console.log("Router guard - isAuthenticated:", isAuthenticated);
-			console.log("Router guard - user.value:", user.value);
-
 			// If trying to access login page while signed in, redirect to home
-			if (to.path === "/login" && isAuthenticated) {
+			if (to.path === "/login" && isSignedIn.value) {
 				console.log(
 					"Router guard - redirecting to home (already authenticated)",
 				);
@@ -53,7 +49,7 @@ router.beforeEach(
 			}
 
 			// If trying to access protected route while not signed in, redirect to login
-			if (to.meta.requiresAuth && !isAuthenticated) {
+			if (to.meta.requiresAuth && !isSignedIn.value) {
 				console.log("Router guard - redirecting to login (not authenticated)");
 				next({ path: "/login", replace: true });
 				return;
@@ -69,5 +65,17 @@ router.beforeEach(
 		}
 	},
 );
+
+async function waitForClerkToLoad() {
+	const { isLoaded } = useSession();
+
+	await new Promise((resolve) => {
+		watch(isLoaded, (val) => {
+			if (val) {
+				resolve(true);
+			}
+		});
+	});
+}
 
 export default router;
