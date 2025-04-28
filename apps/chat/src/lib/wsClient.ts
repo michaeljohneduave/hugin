@@ -38,11 +38,16 @@ export class WebSocketManager implements WebSocketClient {
 	private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly INACTIVITY_THRESHOLD = 1000 * 60 * 5;
 	private isInactive = false;
+private isWindowHandlerRegistered = false;
 
 	private constructor() {
 		// Set up window focus/blur listeners
+if (!this.isWindowHandlerRegistered) {
 		window.addEventListener("focus", this.handleFocus);
 		window.addEventListener("blur", this.handleBlur);
+
+			this.isWindowHandlerRegistered = true;
+		}
 	}
 
 	public static getInstance(): WebSocketManager {
@@ -103,7 +108,10 @@ export class WebSocketManager implements WebSocketClient {
 
 	private connectInternal(token: string): void {
 		const wsUrl = `${import.meta.env.VITE_WEBSOCKET_API_URL}?token=${token}`;
+
+		if (!this.ws) {
 		this.ws = new WebSocket(wsUrl);
+}
 
 		this.ws.onopen = () => {
 			this.isOnline.value = true;
@@ -179,7 +187,13 @@ export class WebSocketManager implements WebSocketClient {
 		}, delay);
 	}
 
-	private startPingInterval(): void {
+	private async startPingInterval(): Promise<void> {
+		const token = this.getToken && (await this.getToken());
+
+		if (token) {
+			this.sendPing({ action: "ping", token });
+		}
+
 		// Send ping every minute
 		this.pingInterval = setInterval(async () => {
 			if (this.ws?.readyState === WebSocket.OPEN && this.getToken) {
