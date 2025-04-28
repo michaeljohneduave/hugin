@@ -321,7 +321,7 @@ const sendMessage = () => {
     user: props.currentUser
   };
 
-  if (taggedBot.value) {
+  if (taggedBot.value && message.message?.includes(taggedBot.value.name)) {
     message.mentions = [
       taggedBot.value.id
     ]
