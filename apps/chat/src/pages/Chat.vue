@@ -6,7 +6,7 @@ import MessageComponent from "@/components/Message.vue";
 import RoomEventComponent from '@/components/RoomEvent.vue';
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
-import { useAuth, useSession, useUser } from "@clerk/vue";
+import { useAuth, useUser } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
 import type { ChatPayload, User } from "@hugin-bot/core/src/types";
 import {
@@ -56,7 +56,6 @@ const userMap = new Map<string, User>();
 
 const { user: clerkUser } = useUser();
 const { signOut } = useAuth();
-const { session, } = useSession();
 const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler, connect } = useWebsocket();
 const trpc = useTrpc();
 const { isDarkMode, toggleTheme } = useTheme();
@@ -269,12 +268,6 @@ watch(chatMessages.value, () => {
 	scrollToBottom(true);
 });
 
-// watch(chatRoomId, (oldRoomId, newRoomId) => {
-// 	if ( oldRoomId !== newRoomId) {
-// 		fetchMessages(newRoomId);
-// 	}
-// });
-
 // Check for @mentions
 watch(messageInput, (newValue) => {
 	const lastAtIndex = newValue.lastIndexOf("@");
@@ -289,40 +282,25 @@ watch(messageInput, (newValue) => {
 	}
 });
 
-console.log("session", session.value)
-watch(session, async (val) => {
-	if (val?.user) {
-		try {
-			const rooms = await fetchRooms();
-			if (rooms.length > 0) {
-				chatRoomId.value = rooms[0].roomId;
-				await fetchMessages(rooms[0].roomId);
-			} else {
-				// No rooms available
-				isLoadingMessages.value = false;
-			}
-		} catch (error) {
-			console.error('Error fetching rooms:', error);
-			isLoadingMessages.value = false;
-		}
-		connect();
+onMounted(async () => {
+	connect();
+	const rooms = await fetchRooms();
+	if (rooms.length > 0) {
+		chatRoomId.value = rooms[0].roomId;
+		await fetchMessages(rooms[0].roomId);
+	} else {
+		isLoadingMessages.value = false;
 	}
-}, {
-	immediate: true,
-})
 
-onMounted(() => {
 	addMessageHandler(handleWebSocketMessage);
 	document.addEventListener("click", handleShowAttachmentMenu);
 	document.addEventListener("click", handleOutsideClick);
-	messagesContainer.value?.addEventListener('scroll', handleScroll);
-
-	scrollToBottom(true);
+	// messagesContainer.value?.addEventListener('scroll', handleScroll);
 });
 
 onUnmounted(() => {
 	removeMessageHandler(handleWebSocketMessage);
-	messagesContainer.value?.removeEventListener('scroll', handleScroll);
+	// messagesContainer.value?.removeEventListener('scroll', handleScroll);
 	document.removeEventListener("click", handleShowAttachmentMenu);
 	document.removeEventListener("click", handleOutsideClick);
 });

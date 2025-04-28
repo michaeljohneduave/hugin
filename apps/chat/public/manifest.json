@@ -1,7 +1,7 @@
 {
-  "name": "Hugin Chat",
-  "short_name": "Hugin",
-  "description": "AI Chat Application",
+  "name": "Pearl",
+  "short_name": "Pearl",
+  "description": "Pearl, your life assistant",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
