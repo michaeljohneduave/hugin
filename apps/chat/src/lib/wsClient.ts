@@ -38,13 +38,13 @@ export class WebSocketManager implements WebSocketClient {
 	private inactivityTimer: ReturnType<typeof setTimeout> | null = null;
 	private readonly INACTIVITY_THRESHOLD = 1000 * 60 * 5;
 	private isInactive = false;
-private isWindowHandlerRegistered = false;
+	private isWindowHandlerRegistered = false;
 
 	private constructor() {
 		// Set up window focus/blur listeners
-if (!this.isWindowHandlerRegistered) {
-		window.addEventListener("focus", this.handleFocus);
-		window.addEventListener("blur", this.handleBlur);
+		if (!this.isWindowHandlerRegistered) {
+			window.addEventListener("focus", this.handleFocus);
+			window.addEventListener("blur", this.handleBlur);
 
 			this.isWindowHandlerRegistered = true;
 		}
@@ -110,8 +110,8 @@ if (!this.isWindowHandlerRegistered) {
 		const wsUrl = `${import.meta.env.VITE_WEBSOCKET_API_URL}?token=${token}`;
 
 		if (!this.ws) {
-		this.ws = new WebSocket(wsUrl);
-}
+			this.ws = new WebSocket(wsUrl);
+		}
 
 		this.ws.onopen = () => {
 			this.isOnline.value = true;
