@@ -6,7 +6,7 @@ import MessageComponent from "@/components/Message.vue";
 import RoomEventComponent from '@/components/RoomEvent.vue';
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
-import { useSession } from "@clerk/vue";
+import { useAuth, useSession, useUser } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
 import type { ChatPayload, User } from "@hugin-bot/core/src/types";
 import {
@@ -14,13 +14,11 @@ import {
 	LogOutIcon,
 	MoonIcon,
 	SunIcon,
-	Users as UsersIcon,
 } from "lucide-vue-next";
-import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import { version } from '../../package.json';
 import MessageInput from "../components/MessageInput.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
-import { useAuth } from "../composables/useAuth";
 import { useTheme } from '../composables/useTheme';
 
 export type Attachment = {
@@ -54,8 +52,22 @@ const unknownBot: User = {
 	avatar: loebotteAvatar,
 	type: "llm" as const
 }
+const userMap = new Map<string, User>();
 
-// State
+const { user: clerkUser } = useUser();
+const { signOut } = useAuth();
+const { session, } = useSession();
+const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler, connect } = useWebsocket();
+const trpc = useTrpc();
+const { isDarkMode, toggleTheme } = useTheme();
+
+const currentUser = computed(() => ({
+	id: clerkUser.value!.id,
+	name: clerkUser.value!.fullName!,
+	type: "user" as const,
+	avatar: clerkUser.value?.imageUrl,
+}));
+
 const chatRoomId = ref("");
 const messageInput = ref("");
 const chatMessages = ref<Array<ChatPayload>>([]);
@@ -68,14 +80,6 @@ const isLoadingMessages = ref(true);
 
 const isScrolledToBottom = ref(true);
 const isUserMenuOpen = ref(false);
-
-const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();
-const { session } = useSession();
-const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler, connect } = useWebsocket();
-const trpc = useTrpc();
-const { isDarkMode, toggleTheme } = useTheme();
-
-const userMap = new Map<string, User>();
 
 // Update scrollToBottom function to be smoother and handle image loading
 const scrollToBottom = (force = false) => {
@@ -127,7 +131,6 @@ const scrollToBottom = (force = false) => {
 	});
 };
 
-// Add scroll event handler to track scroll position
 const handleScroll = () => {
 	if (!messagesContainer.value) return;
 
@@ -141,6 +144,7 @@ const fetchMessages = async (roomId: string) => {
 		isLoadingMessages.value = true;
 		const { messages, members } = await trpc.chats.messagesByRoom.query({
 			roomId,
+			limit: 20,
 		});
 
 		const msgs: ChatPayload[] = [];
@@ -192,7 +196,6 @@ const fetchMessages = async (roomId: string) => {
 	}
 };
 
-// Function to fetch room members
 const fetchRooms = async () => {
 	const rooms = await trpc.chats.userRooms.query();
 	return rooms;
@@ -262,14 +265,6 @@ const handleOutsideClick = (event: MouseEvent) => {
 	}
 }
 
-const handleLogout = async () => {
-	try {
-		await signOut();
-	} catch (error) {
-		console.error("Error logging out:", error);
-	}
-};
-
 watch(chatMessages.value, () => {
 	scrollToBottom(true);
 });
@@ -294,16 +289,9 @@ watch(messageInput, (newValue) => {
 	}
 });
 
-watch(session, (val) => {
+console.log("session", session.value)
+watch(session, async (val) => {
 	if (val?.user) {
-		connect();
-	}
-}, {
-	once: true,
-})
-
-watch(isOnline, async (newVal) => {
-	if (newVal) {
 		try {
 			const rooms = await fetchRooms();
 			if (rooms.length > 0) {
@@ -317,7 +305,10 @@ watch(isOnline, async (newVal) => {
 			console.error('Error fetching rooms:', error);
 			isLoadingMessages.value = false;
 		}
+		connect();
 	}
+}, {
+	immediate: true,
 })
 
 onMounted(() => {
@@ -338,13 +329,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div v-if="isAuthLoading" class="flex h-screen items-center justify-center">
-		<div class="text-gray-500 dark:text-gray-400">Loading...</div>
-	</div>
-	<div v-else-if="authError" class="flex h-screen items-center justify-center">
-		<div class="text-red-500">Error: {{ authError.message }}</div>
-	</div>
-	<div v-else class="h-dvh bg-gray-100 dark:bg-gray-900">
+	<div class="h-dvh bg-gray-100 dark:bg-gray-900">
 		<!-- Main content -->
 		<div class="h-dvh flex flex-col">
 			<!-- Chat header -->
@@ -398,7 +383,7 @@ onUnmounted(() => {
 									<hr class="my-1 border-gray-200 dark:border-gray-700">
 
 									<!-- Logout -->
-									<button @click="handleLogout(); isUserMenuOpen = false"
+									<button @click="signOut(); isUserMenuOpen = false"
 										class="flex items-center w-full px-4 py-2 text-left text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
 										<LogOutIcon class="h-5 w-5 mr-2" />
 										Logout

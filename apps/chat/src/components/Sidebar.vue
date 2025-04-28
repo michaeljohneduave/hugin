@@ -1,18 +1,18 @@
 <script lang="ts" setup>
+import { useAuth, useUser } from "@clerk/vue";
 import type { RouterOutput } from "@hugin-bot/core/src/types";
 import {
-  Bot,
   LogOut as LogOutIcon,
   Moon as MoonIcon,
   MoreHorizontal as MoreHorizontalIcon,
   Sun as SunIcon,
 } from "lucide-vue-next";
-import { computed, ref } from 'vue';
-import { useAuth } from '../composables/useAuth';
+import { ref } from 'vue';
 import { useTheme } from '../composables/useTheme';
 
 const { isDarkMode, toggleTheme } = useTheme();
-const { user: currentUser, isLoading: isAuthLoading, error: authError, signOut } = useAuth();
+const { signOut } = useAuth();
+const { user } = useUser();
 
 const props = defineProps<{
   currentChatId: string;
@@ -29,15 +29,6 @@ const emit = defineEmits<{
 
 const showUserMenu = ref(false);
 const activeTab = ref<'people' | 'ai'>('ai');
-
-// Add logout handler
-const handleLogout = async () => {
-  try {
-    await signOut();
-  } catch (error) {
-    console.error("Error logging out:", error);
-  }
-};
 </script>
 
 <template>
@@ -46,12 +37,12 @@ const handleLogout = async () => {
     <div class="h-16 flex items-center justify-between px-4 border-b dark:border-gray-700">
       <div class="flex items-center space-x-3">
         <div class="relative">
-          <img :src="currentUser?.avatar" alt="" class="h-8 w-8 rounded-full">
+          <img :src="user?.imageUrl" alt="" class="h-8 w-8 rounded-full">
           <div class="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-white dark:border-gray-800"
             :class="isOnline ? 'bg-green-500' : 'bg-red-500'"></div>
         </div>
         <div>
-          <div class="font-medium">{{ currentUser?.name }}</div>
+          <div class="font-medium">{{ user?.fullName }}</div>
           <div class="text-sm text-gray-500">{{ isOnline ? "Online" : "Offline" }}</div>
         </div>
       </div>
@@ -69,7 +60,7 @@ const handleLogout = async () => {
               <MoonIcon v-else class="h-4 w-4 mr-2" />
               <span>{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}</span>
             </button>
-            <button @click="handleLogout"
+            <button @click="signOut()"
               class="flex w-full items-center px-4 py-2 text-sm text-red-600 hover:bg-gray-100 dark:hover:bg-gray-700">
               <LogOutIcon class="h-4 w-4 mr-2" />
               <span>Logout</span>

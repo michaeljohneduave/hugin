@@ -1,22 +1,24 @@
 <script setup lang="ts">
+import { useSession } from '@clerk/vue';
 import { BellIcon, BellOffIcon, CheckCircleIcon, Loader2Icon, XCircleIcon } from 'lucide-vue-next';
 import { onMounted, ref } from "vue";
-import { useAuth } from "../composables/useAuth";
 import { useNotification } from "../composables/useNotification";
 import { usePushNotification } from "../composables/usePushNotification";
 
 const { isSupported, token, requestPermission, unsubscribe, testPushNotification, checkNotificationPermission, initialize, isLoading, isRegistering, setupPushNotifications } = usePushNotification()
 const notification = useNotification()
 const permissionStatus = ref<NotificationPermission | 'unsupported'>('default')
-const { user } = useAuth()
-
-console.log('token', token.value)
+const { session } = useSession();
 
 async function checkPermission() {
   permissionStatus.value = await checkNotificationPermission()
 }
 
 async function toggleNotifications() {
+  if (!session.value?.user.id) {
+    return
+  }
+
   try {
     if (token.value) {
       await unsubscribe()
@@ -35,7 +37,7 @@ async function toggleNotifications() {
 
       if (permission === "granted") {
         // Initialize push notifications
-        const success = await setupPushNotifications(user.value?.id || '');
+        const success = await setupPushNotifications(session.value?.user.id);
         if (success) {
           notification.success("Notifications enabled successfully!");
         } else {

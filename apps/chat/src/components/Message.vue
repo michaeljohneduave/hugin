@@ -34,8 +34,6 @@ const emit = defineEmits<{
   replyToMessage: [message: ChatPayload];
 }>();
 
-
-
 // Format relative time
 const formatRelativeTime = (timestamp: number) => {
   const now = new Date();

@@ -1,11 +1,10 @@
 import { useSession } from "@clerk/vue";
 import { getToken, onMessage } from "firebase/messaging";
 import { ref } from "vue";
-import { onMounted, onUnmounted, watch } from "vue";
+import { onUnmounted, watch } from "vue";
 import { messaging } from "../lib/firebase";
 import { registerServiceWorker } from "../lib/service-worker";
 import { useTrpc } from "../lib/trpc";
-import { useAuth } from "./useAuth";
 import { useNotification } from "./useNotification";
 
 // Constants
@@ -45,7 +44,6 @@ interface InAppNotificationOptions {
 
 export function usePushNotification() {
 	const notification = useNotification();
-	const { user } = useAuth();
 	const { session } = useSession();
 	const trpc = useTrpc();
 	const token = ref<string | null>(null);
