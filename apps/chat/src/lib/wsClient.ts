@@ -66,7 +66,10 @@ export class WebSocketManager implements WebSocketClient {
 		this.isInactive = false;
 
 		// Attempt to reconnect if we're not connected and not already reconnecting
-		if (!this.isOnline.value && !this.isReconnecting && this.getToken) {
+		if (!this.isOnline.value && 
+			!this.isReconnecting && 
+			this.getToken &&
+			(this.ws?.readyState !== WebSocket.OPEN && this.ws?.readyState !== WebSocket.CONNECTING)) {
 			this.getToken().then((token) => {
 				if (token) {
 					this.connect(token);
