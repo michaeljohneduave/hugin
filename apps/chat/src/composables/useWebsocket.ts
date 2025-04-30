@@ -7,12 +7,6 @@ export function useWebsocket() {
 	const { session } = useSession();
 	const { getToken } = useAuth();
 
-	// Set up the getToken function for reconnection
-	ws.setGetToken(async () => {
-		const token = await getToken.value();
-		return token;
-	});
-
 	const connect = async () => {
 		const token = await getToken.value();
 		if (token) {
