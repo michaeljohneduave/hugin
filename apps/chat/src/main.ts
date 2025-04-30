@@ -1,6 +1,7 @@
 import "./assets/global.css";
 
 import { clerkPlugin } from "@clerk/vue";
+import * as Sentry from "@sentry/vue";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
 import { createApp } from "vue";
 import App from "./App.vue";
@@ -10,6 +11,14 @@ import router from "./router";
 WebSocketManager.getInstance();
 
 const app = createApp(App);
+
+Sentry.init({
+	app,
+	dsn: "https://81a73f85728a848ffc4d7280618530d1@o4506177071808512.ingest.us.sentry.io/4509244796108800",
+	// Setting this option to true will send default PII data to Sentry.
+	// For example, automatic IP address collection on events
+	sendDefaultPii: true,
+});
 
 // Initialize Clerk
 const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
