@@ -7,16 +7,28 @@ export async function registerServiceWorker() {
 	}
 
 	try {
-		const [registration] = await navigator.serviceWorker.getRegistrations();
+		// Register or update the service worker
+		const registration = await navigator.serviceWorker.register('/service-worker.js', {
+			scope: '/',
+			type: 'module',
+			updateViaCache: 'none' // Ensure the browser always checks for updates
+		});
 
+		// Only clear problematic caches (HTML/JS) but keep image and other static asset caches
 		const cacheKeys = await caches.keys();
-		await Promise.all(cacheKeys.map((key) => caches.delete(key)));
-		console.log("[Service Worker] Cleared existing caches");
+		const problematicCaches = cacheKeys.filter(key => 
+			key.includes('html') || key.includes('js') || key.includes('navigation'));
+		
+		if (problematicCaches.length > 0) {
+			await Promise.all(problematicCaches.map((key) => caches.delete(key)));
+			console.log("[Service Worker] Cleared problematic caches:", problematicCaches);
+		}
 
 		// Pass Firebase configuration to the service worker
 		await registration.active?.postMessage({
 			type: "FIREBASE_CONFIG",
 			config: JSON.stringify(firebaseConfig),
+			vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
 		});
 
 		console.log("[Service Worker] Registration successful:", registration);
