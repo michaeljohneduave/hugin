@@ -1,4 +1,5 @@
 import { URL, fileURLToPath } from "node:url";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
@@ -31,9 +32,9 @@ export default defineConfig({
 			},
 			includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.png"],
 			manifest: {
-				name: "Hugin Chat",
-				short_name: "Hugin",
-				description: "Hugin Chat Application",
+				name: "Pearl",
+				short_name: "Pearl",
+				description: "Pearl, your life assistant",
 				theme_color: "#ffffff",
 				icons: [
 					{
@@ -50,10 +51,26 @@ export default defineConfig({
 				],
 			},
 		}),
+		sentryVitePlugin({
+			org: "michael-eduave",
+			project: "pearl-chat",
+			sourcemaps: {
+				filesToDeleteAfterUpload: [
+					"index-*.js.map",
+					"chunk-*.js.map",
+					"vendor-*.js.map",
+					"service-worker.js.map",
+				],
+			},
+		}),
 	],
+
 	resolve: {
 		alias: {
 			"@": fileURLToPath(new URL("./src", import.meta.url)),
 		},
+	},
+	build: {
+		sourcemap: "hidden",
 	},
 });
