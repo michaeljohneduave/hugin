@@ -408,7 +408,7 @@ export class WebSocketManager implements WebSocketClient {
 				// Treat lack of pong as a connection failure
 				if (this.ws?.readyState === WebSocket.OPEN) {
 					// Close will trigger onclose, which should handle reconnect logic
-					this.ws.close(1006, "Ping timeout");
+					this.ws.close(1000, "Ping timeout");
 				}
 				this.cleanupTimers(); // Stop checks immediately
 			}
