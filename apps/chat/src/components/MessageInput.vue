@@ -206,29 +206,23 @@ const handleInput = (event: Event) => {
 
 // Handle keyboard navigation for bot suggestions
 const handleKeydown = (event: KeyboardEvent) => {
-  if (!showBotSuggestions.value) {
-    if (event.key === 'Enter' && !event.shiftKey) {
-      event.preventDefault();
-      sendMessage();
-    }
-    return;
-  }
-
   switch (event.key) {
     case 'ArrowUp':
+      if (!showBotSuggestions.value) return;
       event.preventDefault();
       selectedBotIndex.value = (selectedBotIndex.value - 1 + filteredBots.value.length) % filteredBots.value.length;
       break;
     case 'ArrowDown':
+      if (!showBotSuggestions.value) return;
       event.preventDefault();
       selectedBotIndex.value = (selectedBotIndex.value + 1) % filteredBots.value.length;
       break;
     case 'Enter':
-      event.preventDefault();
-
       if (showBotSuggestions.value) {
+        event.preventDefault();
         selectBot(filteredBots.value[selectedBotIndex.value]);
-      } else {
+      } else if (!isMobile.value && !event.shiftKey) {
+        event.preventDefault();
         sendMessage();
       }
 
