@@ -36,6 +36,10 @@ export default defineConfig({
 				short_name: "Pearl",
 				description: "Pearl, your life assistant",
 				theme_color: "#ffffff",
+				background_color: "#ffffff",
+				display: "standalone",
+				orientation: "portrait",
+				start_url: "/",
 				icons: [
 					{
 						src: "pwa-192x192.png",
