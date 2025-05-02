@@ -163,7 +163,7 @@ const handleInput = (event: Event) => {
   let lastWord = "";
 
   for (let i = text.length - 1; i >= 0; i--) {
-    if (text[i] !== " ") {
+    if (text[i] !== " " && text[i] !== "\n") {
       lastWord = text[i] + lastWord;
     } else {
       break;
