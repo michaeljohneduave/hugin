@@ -143,7 +143,7 @@ const fetchMessages = async (roomId: string) => {
 		isLoadingMessages.value = true;
 		const { messages, members } = await trpc.chats.messagesByRoom.query({
 			roomId,
-			limit: 20,
+			limit: 1000,
 		});
 
 		const msgs: ChatPayload[] = [];
