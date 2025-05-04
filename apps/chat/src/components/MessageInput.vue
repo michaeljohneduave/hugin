@@ -224,6 +224,10 @@ const handleKeydown = (event: KeyboardEvent) => {
       } else if (!isMobile.value && !event.shiftKey) {
         event.preventDefault();
         sendMessage();
+      } else if (isMobile.value) {
+        nextTick(() => {
+          autoResize();
+        });
       }
 
       break;
@@ -401,11 +405,10 @@ onUnmounted(() => {
       </div>
 
       <!-- Input with search button -->
-      <div class="flex items-center space-x-2">
+      <div class="flex items-center">
         <button type="button" @click.stop="toggleFunctionButtons"
-          class="rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-          :class="{ 'bg-gray-100 dark:bg-gray-700': showFunctionButtons }">
-          <SearchIcon class="h-5 w-5" />
+          class="rounded-full text-gray-500 dark:text-gray-400 pr-2">
+          <SearchIcon class="h-6 w-6" />
         </button>
 
         <div class="flex-1 relative flex flex-col">
@@ -425,9 +428,9 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <button type="submit" class="pr-1 pb-1 rounded-full text-primary dark:text-blue-400"
+        <button type="submit" class="py-1 px-2 rounded-full text-primary dark:text-blue-400"
           :disabled="!messageInput.trim() && !selectedFile && !selectedVideoFile && !selectedAudioFile && !audioRecording">
-          <SendIcon class="h-5 w-5" />
+          <SendIcon class="h-6 w-6" />
         </button>
       </div>
 
