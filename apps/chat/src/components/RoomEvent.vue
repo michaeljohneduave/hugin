@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import type { ChatPayload } from "@hugin-bot/core/src/types";
+import type { RoomPayload } from "@hugin-bot/core/src/types";
 import { computed } from 'vue';
 
 const props = defineProps<{
-  event: ChatPayload;
+  event: RoomPayload;
   index: number;
-  messages: Array<ChatPayload>;
 }>();
 
 // Format relative time similar to Message component
@@ -48,22 +47,6 @@ const formatRelativeTime = (timestamp: number) => {
     hour12: true
   }).toLowerCase()}`;
 };
-
-// Check if we should show a timestamp separator
-const showTimestamp = computed(() => {
-  if (props.index === 0) return true;
-  const prevMessage = props.messages[props.index - 1];
-  const timeDiff = props.event.createdAt - prevMessage.createdAt;
-  const minutes = timeDiff / (1000 * 60);
-
-  if (minutes > 120) return true; // Show after 2 hours gap
-
-  const prevDate = new Date(prevMessage.createdAt).toDateString();
-  const currentDate = new Date(props.event.createdAt).toDateString();
-  if (prevDate !== currentDate) return true;
-
-  return minutes > 15; // Show every 15 minutes
-});
 
 // Get event message based on event type and data
 const getEventMessage = computed(() => {
