@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import type { Bot } from "@/pages/Chat.vue";
-import type { ChatPayload, User } from "@hugin-bot/core/src/types";
+import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref } from 'vue';
+import MessageMetadataDialog from './MessageMetadataDialog.vue';
 
 import '@/lib/prism';
 
@@ -14,21 +15,34 @@ type MessagePart = {
   language?: string;
 };
 
+
 const props = defineProps<{
   message: ChatPayload;
   index: number;
   currentUser: User;
-  messages: Array<ChatPayload>;
+  messages: Array<ChatPayload | RoomPayload>;
   availableBots: Bot[]
 }>();
 
 // Add touch handling state
 const touchStartX = ref(0);
 const touchCurrentX = ref(0);
+const touchStartY = ref(0); // Track Y position for dropdown placement
+
+// Long press handling for mobile
+const longPressTimer = ref<ReturnType<typeof setTimeout> | null>(null);
+const isLongPressed = ref(false);
+const longPressDuration = 500; // ms needed to trigger long press
+const dropdownPosition = ref({ x: 0, y: 0 });
+const windowWidth = ref(0); // Will be set in onMounted
+
+// Metadata dialog state
+const showMetadataDialog = ref(false);
 const isSliding = ref(false);
 const slideThreshold = 80; // pixels needed to trigger reply
 const isHovered = ref(false);
 const isMessageCodeBlock = ref(false);
+const showMobileActions = ref(false);
 
 const emit = defineEmits<{
   replyToMessage: [message: ChatPayload];
@@ -168,32 +182,59 @@ const handleReply = () => {
 // Touch event handlers
 const handleTouchStart = (event: TouchEvent) => {
   touchStartX.value = event.touches[0].clientX;
+  touchStartY.value = event.touches[0].clientY;
   isSliding.value = true;
+
+  // Start long press timer
+  longPressTimer.value = setTimeout(() => {
+    isLongPressed.value = true;
+    // Set dropdown position to touch location
+    dropdownPosition.value = {
+      x: touchStartX.value,
+      y: touchStartY.value
+    };
+    showMobileActions.value = true;
+    isSliding.value = false;
+  }, longPressDuration);
 };
 
 const handleTouchMove = (event: TouchEvent) => {
   if (!isSliding.value) return;
   touchCurrentX.value = event.touches[0].clientX;
 
-  // Prevent scrolling if we're sliding horizontally
   const diff = touchCurrentX.value - touchStartX.value;
-  if (diff > 10) {
-    // event.preventDefault();
+
+  // Cancel long press if user is sliding
+  if (Math.abs(diff) > 10 && longPressTimer.value !== null) {
+    clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
   }
 };
 
 const handleTouchEnd = () => {
-  if (!isSliding.value) return;
-
-  const diff = touchCurrentX.value - touchStartX.value;
-  if (diff >= slideThreshold) {
-    emit('replyToMessage', props.message);
+  // Clear long press timer
+  if (longPressTimer.value !== null) {
+    clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
   }
 
-  // Reset state
-  isSliding.value = false;
-  touchStartX.value = 0;
-  touchCurrentX.value = 0;
+  // Handle slide to reply if not long pressed
+  if (isSliding.value) {
+    const diff = touchCurrentX.value - touchStartX.value;
+    if (diff >= slideThreshold) {
+      emit('replyToMessage', props.message);
+    }
+
+    // Reset sliding state
+    isSliding.value = false;
+    touchStartX.value = 0;
+    touchCurrentX.value = 0;
+  }
+};
+
+const closeMobileActions = () => {
+  showMobileActions.value = false;
+  isLongPressed.value = false;
 };
 
 // Render message content
@@ -335,8 +376,19 @@ const showTimestamp = computed(() => {
   return minutes > 15; // Show every 15 minutes
 });
 
+// Create resize handler function
+const handleResize = () => {
+  windowWidth.value = window.innerWidth;
+};
+
 // Add copy functionality
 onMounted(() => {
+  // Set initial window width
+  windowWidth.value = window.innerWidth;
+
+  // Add window resize listener
+  window.addEventListener('resize', handleResize);
+
   // Add click handler for copy buttons
   document.addEventListener('click', (e) => {
     const target = e.target as HTMLElement;
@@ -359,6 +411,19 @@ onMounted(() => {
       }
     }
   });
+});
+
+// Clean up event listeners and timers when component is unmounted
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize);
+
+  // Clear any remaining timers
+  if (longPressTimer.value !== null) {
+    clearTimeout(longPressTimer.value);
+    longPressTimer.value = null;
+  }
+
+  // We don't need to remove document click listeners as they're added in onMounted
 });
 
 </script>
@@ -471,17 +536,35 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- Reply button (hidden on mobile since we use slide) -->
-      <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+      <!-- Buttons container -->
+      <div class="flex flex-col items-center gap-2">
+        <!-- Metadata button (desktop) -->
+        <button v-if="message.metadata" @click="showMetadataDialog = true" title="View metadata" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+          hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
+          group-hover:opacity-100 transition-opacity duration-200 cursor-pointer hidden md:block" :class="{
+            'opacity-0': !isHovered && !isMessageCodeBlock,
+            'opacity-100': isHovered || isMessageCodeBlock
+          }">
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <line x1="12" y1="16" x2="12" y2="12"></line>
+            <line x1="12" y1="8" x2="12.01" y2="8"></line>
+          </svg>
+        </button>
+
+        <!-- Reply button (hidden on mobile since we use slide) -->
+        <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
           " :class="[isHovered ? 'opacity-100' : 'opacity-0']">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
-          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="9 14 4 9 9 4"></polyline>
-          <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
-        </svg>
-      </button>
+          <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 14 4 9 9 4"></polyline>
+            <path d="M20 20v-7a4 4 0 0 0-4-4H4"></path>
+          </svg>
+        </button>
+      </div>
     </div>
 
     <!-- Replies to this message -->
@@ -492,10 +575,54 @@ onMounted(() => {
         @reply-to-message="emit('replyToMessage', $event)" />
     </div> -->
   </div>
+  <!-- Mobile Actions Dropdown -->
+  <div v-if="showMobileActions" class="mobile-actions-overlay fixed inset-0 z-50" @click="closeMobileActions"></div>
+  <div v-if="showMobileActions"
+    class="mobile-actions-dropdown absolute z-50 bg-white dark:bg-gray-800 rounded-lg shadow-lg p-2 border border-gray-200 dark:border-gray-700"
+    :style="{
+      left: `${Math.min(dropdownPosition.x, windowWidth - 210)}px`,
+      top: `${dropdownPosition.y}px`
+    }">
+    <div class="flex flex-col">
+      <button v-if="message.metadata" @click="showMetadataDialog = true; closeMobileActions();"
+        class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"></circle>
+          <line x1="12" y1="16" x2="12" y2="12"></line>
+          <line x1="12" y1="8" x2="12.01" y2="8"></line>
+        </svg>
+        <span>View Metadata</span>
+      </button>
+      <button @click="handleReply(); closeMobileActions();"
+        class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 17 4 12 9 7"></polyline>
+          <path d="M20 18v-2a4 4 0 0 0-4-4H4"></path>
+        </svg>
+        <span>Reply</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Message Metadata Dialog -->
+  <MessageMetadataDialog :show="showMetadataDialog" :metadata="message.metadata || null"
+    @close="showMetadataDialog = false" />
 </template>
 
 <style scoped>
 /* Add any component-specific styles here */
+
+.mobile-actions-overlay {
+  background-color: rgba(0, 0, 0, 0.3);
+}
+
+.mobile-actions-dropdown {
+  position: fixed;
+  width: 200px;
+  /* Position will be set dynamically via inline styles */
+}
 
 /* Code block styles */
 :deep(.code-block) {
