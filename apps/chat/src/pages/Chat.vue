@@ -8,7 +8,7 @@ import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useAuth, useUser } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
-import type { ChatPayload, User } from "@hugin-bot/core/src/types";
+import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
 import {
 	BellIcon,
 	LogOutIcon,
@@ -69,7 +69,7 @@ const currentUser = computed(() => ({
 
 const chatRoomId = ref("");
 const messageInput = ref("");
-const chatMessages = ref<Array<ChatPayload>>([]);
+const chatMessages = ref<Array<ChatPayload | RoomPayload>>([]);
 const showAttachmentMenu = ref(false);
 const messagesContainer = ref<HTMLDivElement | null>(null);
 const showMentionSuggestions = ref(false);
@@ -143,10 +143,11 @@ const fetchMessages = async (roomId: string) => {
 		isLoadingMessages.value = true;
 		const { messages, members } = await trpc.chats.messagesByRoom.query({
 			roomId,
-			limit: 1000,
+			limit: import.meta.env.DEV ? 20 : 1000,
 		});
 
-		const msgs: ChatPayload[] = [];
+
+		const msgs: (ChatPayload | RoomPayload)[] = [];
 		for (const msg of messages) {
 			let user: User;
 
@@ -423,10 +424,11 @@ onUnmounted(() => {
 
 				<!-- Message list -->
 				<template v-for="(message, index) in chatMessages" :key="message.messageId">
-					<MessageComponent v-if="message.type === 'llm' || message.type === 'user'" :message="message" :index="index"
+					<MessageComponent v-if="message.action === 'message'" :message="message as ChatPayload" :index="index"
 						:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
 						@reply-to-message="handleReplyToMessage" />
-					<RoomEventComponent v-else :event="message" :index="index" :messages="chatMessages" />
+					<RoomEventComponent v-else-if="message.action === 'joinRoom' || message.action === 'leaveRoom'"
+						:event="message as RoomPayload" :index="index" />
 				</template>
 			</div>
 
