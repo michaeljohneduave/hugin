@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDeviceDetection } from '@/composables/useDeviceDetection';
 import type { Bot } from "@/pages/Chat.vue";
 import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
 import DOMPurify from 'isomorphic-dompurify';
@@ -14,7 +15,6 @@ type MessagePart = {
   content: string;
   language?: string;
 };
-
 
 const props = defineProps<{
   message: ChatPayload;
@@ -35,6 +35,9 @@ const isLongPressed = ref(false);
 const longPressDuration = 500; // ms needed to trigger long press
 const dropdownPosition = ref({ x: 0, y: 0 });
 const windowWidth = ref(0); // Will be set in onMounted
+
+// Device detection
+const { isMobile } = useDeviceDetection();
 
 // Metadata dialog state
 const showMetadataDialog = ref(false);
@@ -539,7 +542,8 @@ onUnmounted(() => {
       <!-- Buttons container -->
       <div class="flex flex-col items-center gap-2">
         <!-- Metadata button (desktop) -->
-        <button v-if="message.metadata" @click="showMetadataDialog = true" title="View metadata" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+        <button v-if="message.type === 'llm'" @click="showMetadataDialog = true; console.log('Showing metadata dialog')"
+          title="View metadata" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer hidden md:block" :class="{
             'opacity-0': !isHovered && !isMessageCodeBlock,
@@ -553,10 +557,10 @@ onUnmounted(() => {
           </svg>
         </button>
 
-        <!-- Reply button (hidden on mobile since we use slide) -->
-        <button @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+        <!-- Reply button (desktop only - hidden on mobile since we use slide) -->
+        <button v-if="!isMobile" @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
-          group-hover:opacity-100 transition-opacity duration-200 cursor-pointer
+          group-hover:opacity-100 transition-opacity duration-200 cursor-pointer hidden md:block
           " :class="[isHovered ? 'opacity-100' : 'opacity-0']">
           <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none"
             stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -584,7 +588,7 @@ onUnmounted(() => {
       top: `${dropdownPosition.y}px`
     }">
     <div class="flex flex-col">
-      <button v-if="message.metadata" @click="showMetadataDialog = true; closeMobileActions();"
+      <button v-if="message.type === 'llm'" @click="showMetadataDialog = true; closeMobileActions();"
         class="flex items-center gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -607,7 +611,7 @@ onUnmounted(() => {
   </div>
 
   <!-- Message Metadata Dialog -->
-  <MessageMetadataDialog :show="showMetadataDialog" :metadata="message.metadata || null"
+  <MessageMetadataDialog :show="showMetadataDialog" :messageId="message.messageId" :metadata="null"
     @close="showMetadataDialog = false" />
 </template>
 
