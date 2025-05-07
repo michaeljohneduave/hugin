@@ -4,8 +4,6 @@ import { onMounted, onUnmounted, ref } from "vue";
 import NotificationContainer from "./components/NotificationContainer.vue";
 import { useNotification } from "./composables/useNotification";
 
-const notifications = useNotification();
-
 const visualViewport = window.visualViewport;
 let debouncedResize: ReturnType<typeof funnel>;
 const keyboardHidden = ref(true);
@@ -19,8 +17,6 @@ function visualportResize() {
 }
 
 onMounted(() => {
-	notifications.success("Welcome to the chat app!");
-
 	debouncedResize = funnel(
 		() => {
 			handleResize();
