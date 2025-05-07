@@ -3,23 +3,18 @@ import carmyAvatar from "@/assets/carmy-avatar.webp";
 import loebotteAvatar from "@/assets/loebotte-avatar.webp";
 import pearlAvatar from "@/assets/pearl-avatar.webp";
 import MessageComponent from "@/components/Message.vue";
-import RoomEventComponent from '@/components/RoomEvent.vue';
+import RoomEventComponent from "@/components/RoomEvent.vue";
 import { useWebsocket } from "@/composables/useWebsocket";
 import { useTrpc } from "@/lib/trpc";
 import { useAuth, useUser } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
 import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
-import {
-	BellIcon,
-	LogOutIcon,
-	MoonIcon,
-	SunIcon,
-} from "lucide-vue-next";
+import { BellIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-vue-next";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { version } from '../../package.json';
+import { version } from "../../package.json";
 import MessageInput from "../components/MessageInput.vue";
 import NotificationSettings from "../components/NotificationSettings.vue";
-import { useTheme } from '../composables/useTheme';
+import { useTheme } from "../composables/useTheme";
 
 export type Attachment = {
 	name: string;
@@ -31,32 +26,38 @@ export interface Bot {
 	id: string;
 	name: string;
 	avatar?: string;
-};
-
-const botAvatars = {
-	"carmy": carmyAvatar,
-	"pearl": pearlAvatar,
-	"lobot": loebotteAvatar
 }
 
-const availableBots = llmAgents.concat(llmRouters).map(agent => ({
+const botAvatars = {
+	carmy: carmyAvatar,
+	pearl: pearlAvatar,
+	lobot: loebotteAvatar,
+};
+
+const availableBots = llmAgents.concat(llmRouters).map((agent) => ({
 	id: agent.id,
 	name: agent.name,
 	avatar: botAvatars[agent.id as keyof typeof botAvatars],
-	type: "llm" as const
+	type: "llm" as const,
 }));
 
 const unknownBot: User = {
 	id: "lobot",
 	name: "Loebotte",
 	avatar: loebotteAvatar,
-	type: "llm" as const
-}
+	type: "llm" as const,
+};
 const userMap = new Map<string, User>();
 
 const { user: clerkUser } = useUser();
 const { signOut } = useAuth();
-const { isOnline, sendMessage: sendSocketMsg, addMessageHandler, removeMessageHandler, connect } = useWebsocket();
+const {
+	isOnline,
+	sendMessage: sendSocketMsg,
+	addMessageHandler,
+	removeMessageHandler,
+	connect,
+} = useWebsocket();
 const trpc = useTrpc();
 const { isDarkMode, toggleTheme } = useTheme();
 
@@ -85,7 +86,7 @@ const scrollToBottom = (force = false) => {
 	nextTick(() => {
 		if (messagesContainer.value && (isScrolledToBottom.value || force)) {
 			// Check for all images in the container
-			const allImages = messagesContainer.value.querySelectorAll('img');
+			const allImages = messagesContainer.value.querySelectorAll("img");
 
 			if (allImages.length > 0) {
 				// Count how many images are still loading
@@ -98,7 +99,7 @@ const scrollToBottom = (force = false) => {
 					if (loadedImagesCount >= loadingImagesCount) {
 						messagesContainer.value?.scrollTo({
 							top: messagesContainer.value.scrollHeight,
-							behavior: 'instant'
+							behavior: "instant",
 						});
 					}
 				};
@@ -116,14 +117,14 @@ const scrollToBottom = (force = false) => {
 				if (loadingImagesCount === 0) {
 					messagesContainer.value.scrollTo({
 						top: messagesContainer.value.scrollHeight,
-						behavior: 'instant'
+						behavior: "instant",
 					});
 				}
 			} else {
 				// No images, scroll immediately
 				messagesContainer.value.scrollTo({
 					top: messagesContainer.value.scrollHeight,
-					behavior: 'instant'
+					behavior: "instant",
 				});
 			}
 		}
@@ -146,7 +147,6 @@ const fetchMessages = async (roomId: string) => {
 			limit: import.meta.env.DEV ? 20 : 1000,
 		});
 
-
 		const msgs: (ChatPayload | RoomPayload)[] = [];
 		for (const msg of messages) {
 			let user: User;
@@ -155,7 +155,7 @@ const fetchMessages = async (roomId: string) => {
 				if (userMap.has(msg.userId)) {
 					user = userMap.get(msg.userId)!;
 				} else {
-					const member = members.find(m => m.userId === msg.userId);
+					const member = members.find((m) => m.userId === msg.userId);
 
 					if (member) {
 						user = {
@@ -163,25 +163,26 @@ const fetchMessages = async (roomId: string) => {
 							name: `${member.user.firstName} ${member.user.lastName}`,
 							avatar: member.user.avatar,
 							type: msg.type,
-						}
+						};
 						userMap.set(msg.userId, user);
 					} else {
 						user = {
 							id: msg.userId,
 							name: "Unknown",
 							type: msg.type,
-						}
+						};
 					}
 				}
-
 			} else {
-				user = availableBots.find(bot => bot.id === msg.userId) || unknownBot;
+				user =
+					availableBots.find((bot) => bot.id === msg.userId) ||
+					unknownBot;
 			}
 
 			msgs.push({
 				...msg,
 				user,
-			})
+			});
 		}
 
 		chatMessages.value = msgs;
@@ -190,7 +191,7 @@ const fetchMessages = async (roomId: string) => {
 		await nextTick();
 		scrollToBottom(true);
 	} catch (error) {
-		console.error('Error fetching messages:', error);
+		console.error("Error fetching messages:", error);
 	} finally {
 		isLoadingMessages.value = false;
 	}
@@ -212,13 +213,14 @@ const handleWebSocketMessage = (event: MessageEvent) => {
 			type: data.type,
 		};
 	} else {
-		user = availableBots.find(bot => bot.id === data.userId) || unknownBot;
+		user =
+			availableBots.find((bot) => bot.id === data.userId) || unknownBot;
 	}
 
 	data.user = user;
 	chatMessages.value.push(data);
 
-	if (data.action === 'message') {
+	if (data.action === "message") {
 		scrollToBottom();
 	}
 };
@@ -227,7 +229,9 @@ const handleReplyToMessage = (message: ChatPayload) => {
 	replyToMessage.value = message;
 	// Focus the message input
 	nextTick(() => {
-		const textarea = document.querySelector('textarea') as HTMLTextAreaElement;
+		const textarea = document.querySelector(
+			"textarea"
+		) as HTMLTextAreaElement;
 		if (textarea) textarea.focus();
 	});
 };
@@ -255,19 +259,19 @@ const handleShowAttachmentMenu = (event: MouseEvent) => {
 	if (showAttachmentMenu.value && !target.closest("button")) {
 		showAttachmentMenu.value = false;
 	}
-}
+};
 
 const handleOutsideClick = (event: MouseEvent) => {
 	const target = event.target as HTMLElement;
 	// Close user menu if clicking outside
-	if (isUserMenuOpen.value && !target.closest('.user-menu-container')) {
+	if (isUserMenuOpen.value && !target.closest(".user-menu-container")) {
 		isUserMenuOpen.value = false;
 	}
-}
+};
 
-watch(chatMessages.value, () => {
-	scrollToBottom(true);
-});
+// watch(chatMessages, () => {
+// 	scrollToBottom(true);
+// });
 
 // Check for @mentions
 watch(messageInput, (newValue) => {
@@ -308,137 +312,131 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div class="h-dvh bg-gray-100 dark:bg-gray-900">
-		<!-- Main content -->
-		<div class="h-dvh flex flex-col">
-			<!-- Chat header -->
-			<div class="h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
-				<div class="flex-1 flex items-center justify-between">
-					<div class="flex items-center space-x-2">
-						<div class="flex flex-col">
-							<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
-							<span class="text-xs text-gray-400 dark:text-gray-500 -mt-1">v{{ version }}</span>
-						</div>
-						<div class="flex items-center">
-							<span class="inline-flex h-2 w-2 rounded-full mr-1"
-								:class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
-							<span class="text-xs text-gray-500 dark:text-gray-400">{{ isOnline ? 'Connected' : 'Disconnected'
-							}}</span>
-						</div>
-					</div>
+	<div class="h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
+		<div class="flex-1 flex items-center justify-between">
+			<div class="flex items-center space-x-2">
+				<div class="flex flex-col">
+					<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
+					<span class="text-xs text-gray-400 dark:text-gray-500 -mt-1">v{{ version }}</span>
+				</div>
+				<div class="flex items-center">
+					<span class="inline-flex h-2 w-2 rounded-full mr-1"
+						:class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
+					<span class="text-xs text-gray-500 dark:text-gray-400">{{ isOnline ? 'Connected' : 'Disconnected'
+					}}</span>
+				</div>
+			</div>
 
-					<!-- User actions -->
-					<div class="flex items-center space-x-2">
-						<!-- Dropdown menu -->
-						<div class="relative user-menu-container">
-							<button @click="isUserMenuOpen = !isUserMenuOpen"
-								class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-								<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
-									stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-								</svg>
+			<!-- User actions -->
+			<div class="flex items-center space-x-2">
+				<!-- Dropdown menu -->
+				<div class="relative user-menu-container">
+					<button @click="isUserMenuOpen = !isUserMenuOpen"
+						class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
+						<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
+							stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+						</svg>
+					</button>
+
+					<!-- Dropdown content -->
+					<div v-if="isUserMenuOpen"
+						class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50">
+						<div class="py-1">
+							<!-- Notifications -->
+							<button @click="showNotificationSettings = true; isUserMenuOpen = false"
+								class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
+								<BellIcon class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
+								Notifications
 							</button>
 
-							<!-- Dropdown content -->
-							<div v-if="isUserMenuOpen"
-								class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50">
-								<div class="py-1">
-									<!-- Notifications -->
-									<button @click="showNotificationSettings = true; isUserMenuOpen = false"
-										class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-										<BellIcon class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
-										Notifications
-									</button>
+							<!-- Dark mode toggle -->
+							<button @click="toggleTheme(); isUserMenuOpen = false"
+								class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
+								<SunIcon v-if="isDarkMode" class="h-5 w-5 mr-2 text-amber-500" />
+								<MoonIcon v-else class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
+								{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
+							</button>
 
-									<!-- Dark mode toggle -->
-									<button @click="toggleTheme(); isUserMenuOpen = false"
-										class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-										<SunIcon v-if="isDarkMode" class="h-5 w-5 mr-2 text-amber-500" />
-										<MoonIcon v-else class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
-										{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
-									</button>
+							<!-- Divider -->
+							<hr class="my-1 border-gray-200 dark:border-gray-700">
 
-									<!-- Divider -->
-									<hr class="my-1 border-gray-200 dark:border-gray-700">
-
-									<!-- Logout -->
-									<button @click="signOut(); isUserMenuOpen = false"
-										class="flex items-center w-full px-4 py-2 text-left text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-										<LogOutIcon class="h-5 w-5 mr-2" />
-										Logout
-									</button>
-								</div>
-							</div>
+							<!-- Logout -->
+							<button @click="signOut(); isUserMenuOpen = false"
+								class="flex items-center w-full px-4 py-2 text-left text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
+								<LogOutIcon class="h-5 w-5 mr-2" />
+								Logout
+							</button>
 						</div>
 					</div>
 				</div>
 			</div>
+		</div>
+	</div>
 
-			<!-- Notification Settings Modal -->
-			<div v-show="showNotificationSettings"
-				class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-				<div class="relative bg-white dark:bg-gray-800 rounded-lg max-width-md w-full mx-4">
-					<div class="absolute top-4 right-4">
-						<button @click="showNotificationSettings = false"
-							class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-							<span class="sr-only">Close</span>
-							<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-							</svg>
-						</button>
-					</div>
-					<NotificationSettings />
-				</div>
+	<!-- Notification Settings Modal -->
+	<div v-show="showNotificationSettings"
+		class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+		<div class="relative bg-white dark:bg-gray-800 rounded-lg max-width-md w-full mx-4">
+			<div class="absolute top-4 right-4">
+				<button @click="showNotificationSettings = false"
+					class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
+					<span class="sr-only">Close</span>
+					<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+					</svg>
+				</button>
 			</div>
+			<NotificationSettings />
+		</div>
+	</div>
 
-			<!-- Messages area -->
-			<div ref="messagesContainer" class="flex-1 overflow-y-auto pl-4 pr-2 py-2 space-y-4 min-h-0">
-				<!-- Loading messages state -->
-				<div v-if="isLoadingMessages" class="flex justify-center items-center h-full">
-					<div class="flex flex-col items-center text-gray-500 dark:text-gray-400">
-						<svg class="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-							<path class="opacity-75" fill="currentColor"
-								d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-							</path>
-						</svg>
-						<p>Loading chat...</p>
-					</div>
-				</div>
-
-				<!-- No room selected state (only shown when we've confirmed there are no rooms) -->
-				<div v-else-if="!chatRoomId && !isLoadingMessages" class="flex justify-center items-center h-full">
-					<div class="text-center text-gray-500 dark:text-gray-400">
-						<p class="text-lg">No chat room available</p>
-						<p class="text-sm">Create a room to start chatting</p>
-					</div>
-				</div>
-
-				<!-- Empty room state -->
-				<div v-else-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
-					<div class="text-center text-gray-500 dark:text-gray-400">
-						<p class="text-lg">No messages yet</p>
-						<p class="text-sm">Send a message to start the conversation</p>
-					</div>
-				</div>
-
-				<!-- Message list -->
-				<template v-for="(message, index) in chatMessages" :key="message.messageId">
-					<MessageComponent v-if="message.action === 'message'" :message="message as ChatPayload" :index="index"
-						:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
-						@reply-to-message="handleReplyToMessage" />
-					<RoomEventComponent v-else-if="message.action === 'joinRoom' || message.action === 'leaveRoom'"
-						:event="message as RoomPayload" :index="index" />
-				</template>
-			</div>
-
-			<!-- Input area -->
-			<div class="">
-				<MessageInput :currentUser="currentUser" :currentChatId="chatRoomId" :availableBots="availableBots"
-					:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
-					@cancelReply="handleCancelReply" />
+	<!-- Messages area -->
+	<div ref="messagesContainer" class="flex-1 overflow-y-auto pl-4 pr-2 py-2 space-y-4 min-h-0">
+		<!-- Loading messages state -->
+		<div v-if="isLoadingMessages" class="flex justify-center items-center h-full">
+			<div class="flex flex-col items-center text-gray-500 dark:text-gray-400">
+				<svg class="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+					<path class="opacity-75" fill="currentColor"
+						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+					</path>
+				</svg>
+				<p>Loading chat...</p>
 			</div>
 		</div>
+
+		<!-- No room selected state (only shown when we've confirmed there are no rooms) -->
+		<div v-else-if="!chatRoomId && !isLoadingMessages" class="flex justify-center items-center h-full">
+			<div class="text-center text-gray-500 dark:text-gray-400">
+				<p class="text-lg">No chat room available</p>
+				<p class="text-sm">Create a room to start chatting</p>
+			</div>
+		</div>
+
+		<!-- Empty room state -->
+		<div v-else-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
+			<div class="text-center text-gray-500 dark:text-gray-400">
+				<p class="text-lg">No messages yet</p>
+				<p class="text-sm">Send a message to start the conversation</p>
+			</div>
+		</div>
+
+		<!-- Message list -->
+		<template v-for="(message, index) in chatMessages" :key="message.messageId">
+			<MessageComponent v-if="message.action === 'message'" :message="message as ChatPayload" :index="index"
+				:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
+				@reply-to-message="handleReplyToMessage" />
+			<RoomEventComponent v-else-if="message.action === 'joinRoom' || message.action === 'leaveRoom'"
+				:event="message as RoomPayload" :index="index" />
+		</template>
+	</div>
+
+	<!-- Input area -->
+	<div>
+		<MessageInput :currentUser="currentUser" :currentChatId="chatRoomId" :availableBots="availableBots"
+			:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
+			@cancelReply="handleCancelReply" />
 	</div>
 </template>
 
@@ -509,7 +507,7 @@ textarea {
 
 /* Emoji picker dark mode adjustments */
 .dark .emoji-picker {
-	background-color: var(--bg-primary) !important;
+	background-color: var(--bg-white) !important;
 	border-color: var(--border-color) !important;
 }
 
@@ -520,7 +518,7 @@ textarea {
 }
 
 .dark .emoji-picker__category-name {
-	background-color: var(--bg-primary) !important;
+	background-color: var(--bg-white) !important;
 	color: var(--text-primary) !important;
 }
 
