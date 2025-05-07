@@ -367,7 +367,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-1.5 bg-white dark:bg-gray-800 dark:border-gray-700">
+  <div class="p-1.5">
     <form @submit.prevent="sendMessage" class="flex flex-col" :class="[
       props.replyTo ? 'space-y-1' : ''
     ]">
