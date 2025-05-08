@@ -1,8 +1,10 @@
 import { ConditionalCheckFailedException } from "@aws-sdk/client-dynamodb";
 import { tool } from "ai";
+import { cosineDistance, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AgentContext } from "../..";
-import { callAlbertAgent } from "../../libs";
+import { db } from "../../../drizzle";
+import { generateEmbeddings } from "../../libs";
 import { today } from "../commonTools";
 import { scrapeUrl } from "../pearl/scraping";
 import {
@@ -12,7 +14,8 @@ import {
 	PantrySchema,
 	RecipeIngredientSchema,
 	RecipeSchema,
-} from "./schema";
+} from "./schema.dynamo";
+import { Recipe } from "./schema.sql";
 
 export const carmyTools = (context: AgentContext) => {
 	const personalTools = {
@@ -25,17 +28,33 @@ export const carmyTools = (context: AgentContext) => {
 				name: z.string(),
 				ingredients: z.array(z.string()),
 				instructions: z.string(),
-				url: z.string().optional(),
+				url: z.string(),
 			}),
-			async execute(params, toolOpts) {
-				console.log("Executing addRecipe tool", toolOpts);
+			async execute(params) {
 				try {
-					await RecipeSchema.create({
-						recipeName: params.name,
-						ingredients: params.ingredients,
-						instructions: params.instructions,
-						url: params.url,
-					}).go();
+					const { embeddings } = await generateEmbeddings([
+						`
+							${params.name}
+							${params.ingredients.join("\n")}
+							${params.instructions}
+							${params.url || ""}
+						`,
+					]);
+
+					await db
+						.insert(Recipe)
+						.values([
+							{
+								userId: context.userId,
+								name: params.name,
+								ingredients: params.ingredients.join("\n"),
+								instructions: params.instructions,
+								url: params.url,
+								embedding: embeddings[0],
+							},
+						])
+						.onConflictDoNothing()
+						.execute();
 
 					return "Recipe added";
 				} catch (e) {
@@ -49,22 +68,107 @@ export const carmyTools = (context: AgentContext) => {
 				}
 			},
 		}),
-		getAllRecipes: tool({
+		findRecipes: tool({
 			description: `
-				Get all recipes from the user's recipe list.
-				This tool is useful when you need to see all the recipes in the user's recipe list.
-				`,
-			parameters: z.object({}),
-			async execute() {
-				const recipes = await RecipeSchema.scan.go();
+			Semantically search for recipes.
+			This tool is useful when you need to find recipes by ingredient or name.
+			Returns an array of recipes with ingredients, instructions, and url.
+			`,
+			parameters: z.object({
+				name: z.string(),
+			}),
+			async execute(params) {
+				const { embeddings } = await generateEmbeddings([`${params.name}`]);
+				const similarity = sql<number>`1 - (${cosineDistance(Recipe.embedding, embeddings[0])})`;
+				const recipes = await db
+					.select({
+						recipeId: Recipe.recipeId,
+						name: Recipe.name,
+						url: Recipe.url,
+						userId: Recipe.userId,
+						ingredients: Recipe.ingredients,
+						instructions: Recipe.instructions,
+						similarity,
+					})
+					.from(Recipe)
+					.where(gt(similarity, 0.5))
+					.limit(10);
 
-				if (!recipes.data || recipes.data.length === 0) {
-					return "No recipes found";
+				if (!recipes.length) {
+					return "Recipe not found";
 				}
 
-				return recipes.data;
+				return recipes.filter((r) => r.similarity >= 0.5);
 			},
 		}),
+		getRecipes: tool({
+			description: `
+				Tool for getting the actual recipes with ingredients, instructions, etc.
+			`,
+			parameters: z.object({
+				recipeNames: z
+					.array(z.string())
+					.describe("Names of the recipes to get"),
+			}),
+			async execute(params) {
+				const [recipe] = await db
+					.select({
+						recipeId: Recipe.recipeId,
+						name: Recipe.name,
+						url: Recipe.url,
+						userId: Recipe.userId,
+						ingredients: Recipe.ingredients,
+						instructions: Recipe.instructions,
+					})
+					.from(Recipe)
+					.where(inArray(Recipe.name, params.recipeNames))
+					.limit(100);
+
+				if (!recipe) {
+					return "Recipe not found";
+				}
+
+				return recipe;
+			},
+		}),
+		getRecipeCount: tool({
+			description: `
+				Tool for getting the count of recipes in the user's recipe list
+			`,
+			parameters: z.object({}),
+			async execute() {
+				const count = await db
+					.select({
+						count: sql<number>`count(*)`,
+					})
+					.from(Recipe)
+					.limit(1);
+
+				return count[0].count;
+			},
+		}),
+		// getAllRecipes: tool({
+		// 	description: `
+		// 		Get all recipes from the user's recipe list, only use this as last resort.
+		// 		`,
+		// 	parameters: z.object({}),
+		// 	async execute() {
+		// 		const recipes = await db.select({
+		// 			recipeId: Recipe.recipeId,
+		// 			name: Recipe.name,
+		// 			url: Recipe.url,
+		// 			userId: Recipe.userId,
+		// 			ingredients: Recipe.ingredients,
+		// 			instructions: Recipe.instructions,
+		// 		}).from(Recipe);
+
+		// 		if (!recipes.length) {
+		// 			return "No recipes found";
+		// 		}
+
+		// 		return recipes;
+		// 	},
+		// }),
 		updateRecipe: tool({
 			description: `
 				Update a recipe.
@@ -95,7 +199,7 @@ export const carmyTools = (context: AgentContext) => {
 
 				const deleteIngredients =
 					recipe.data.ingredients?.filter(
-						(ingredient) => !params.ingredients.includes(ingredient),
+						(ingredient) => !params.ingredients.includes(ingredient)
 					) || [];
 
 				if (deleteIngredients.length > 0) {
@@ -103,7 +207,7 @@ export const carmyTools = (context: AgentContext) => {
 						deleteIngredients.map((ingredient) => ({
 							ingredient,
 							recipeName: params.recipeName,
-						})),
+						}))
 					).go();
 				}
 
@@ -116,27 +220,14 @@ export const carmyTools = (context: AgentContext) => {
 				This tool is useful when you need to remove a recipe from the user's recipe list.
 				`,
 			parameters: z.object({
-				recipeName: z.string(),
+				recipeIds: z.array(z.string()),
 			}),
 			async execute(params, toolOpts) {
-				const recipe = await RecipeSchema.delete({
-					recipeName: params.recipeName,
-				}).go({
-					response: "all_old",
-				});
-
-				if (!recipe.data) {
-					return "Recipe not found";
-				}
-
-				await RecipeIngredientSchema.delete(
-					recipe.data.ingredients.map((ingredient) => ({
-						ingredient,
-						recipeName: params.recipeName,
-					})),
-				).go();
-
-				return "Recipe removed";
+				// @ts-ignore
+				await db
+					.delete(Recipe)
+					// @ts-ignore
+					.where(inArray(Recipe.recipeId, params.recipeIds));
 			},
 		}),
 		addPantryItems: tool({
@@ -152,7 +243,7 @@ export const carmyTools = (context: AgentContext) => {
 						quantity: z.number(),
 						unit: z.string().optional(),
 						shelfLife: z.number().optional(),
-					}),
+					})
 				),
 			}),
 			async execute(params, toolOpts) {
@@ -162,7 +253,7 @@ export const carmyTools = (context: AgentContext) => {
 						quantity: item.quantity,
 						unit: item.unit || "unit",
 						shelfLife: item.shelfLife,
-					})),
+					}))
 				).go();
 
 				return "Pantry items added";
@@ -196,7 +287,7 @@ export const carmyTools = (context: AgentContext) => {
 						quantity: z.number(),
 						unit: z.string().optional(),
 						selfLife: z.number().optional(),
-					}),
+					})
 				),
 			}),
 			async execute(params, toolOpts) {
@@ -206,7 +297,7 @@ export const carmyTools = (context: AgentContext) => {
 						quantity: item.quantity,
 						unit: item.unit || "unit",
 						selfLife: item.selfLife,
-					})),
+					}))
 				).go();
 
 				return "Pantry items updated";
@@ -224,32 +315,10 @@ export const carmyTools = (context: AgentContext) => {
 				await PantrySchema.delete(
 					params.items.map((item) => ({
 						item,
-					})),
+					}))
 				).go();
 
 				return "Pantry items removed";
-			},
-		}),
-		getAllRecipesForIngredient: tool({
-			description: `
-				Get all recipes for an ingredient.
-				This tool is useful when you need to see all the recipes that contain a specific ingredient.
-				You can use this tool to get the recipes for an ingredient that you want to make.
-				You can also use this tool to get the recipes for an ingredient that you want to buy.
-				`,
-			parameters: z.object({
-				ingredient: z.string(),
-			}),
-			async execute(params) {
-				const recipes = await RecipeIngredientSchema.query
-					.byIngredient({
-						ingredient: params.ingredient,
-					})
-					.go();
-				if (recipes.data.length === 0) {
-					return "No recipes found";
-				}
-				return recipes.data.map((recipe) => recipe.recipeName);
 			},
 		}),
 		getGroceryList: tool({
@@ -284,10 +353,21 @@ export const carmyTools = (context: AgentContext) => {
 						item: z.string(),
 						quantity: z.number(),
 						unit: z.string(),
-					}),
+					})
 				),
 			}),
 			async execute(params) {
+				const existingGroceryList = await GroceryListSchema.query
+					.primary({
+						userId: context.userId,
+					})
+					.where((attr, op) => op.eq(attr.isCompleted, false))
+					.go();
+
+				if (existingGroceryList.data.length) {
+					return "Grocery list already exists";
+				}
+
 				await GroceryListSchema.create({
 					userId: context.userId,
 					items: params.items,
@@ -303,13 +383,9 @@ export const carmyTools = (context: AgentContext) => {
 				This tool is useful when you need to add an item to the grocery list.
 				`,
 			parameters: z.object({
-				items: z.array(
-					z.object({
-						item: z.string(),
-					}),
-				),
+				items: z.array(z.string()).describe("Items to add to the grocery list"),
 			}),
-			async execute(params, toolOpts) {
+			async execute(params) {
 				const groceryList = await GroceryListSchema.query
 					.primary({
 						userId: context.userId,
@@ -327,8 +403,7 @@ export const carmyTools = (context: AgentContext) => {
 
 				// Check if items are already in the grocery list
 				const itemsToAdd = params.items.filter(
-					(item) =>
-						!groceryList.data[0].items.some((i) => i.item === item.item),
+					(item) => !groceryList.data[0].items.some((i) => i.item === item)
 				);
 
 				await GroceryListSchema.update({
@@ -336,7 +411,10 @@ export const carmyTools = (context: AgentContext) => {
 					listId: groceryList.data[0].listId,
 				})
 					.append({
-						items: itemsToAdd,
+						items: itemsToAdd.map((item) => ({
+							item,
+							checked: false,
+						})),
 					})
 					.go();
 
@@ -366,7 +444,7 @@ export const carmyTools = (context: AgentContext) => {
 				}
 
 				const itemIndex = groceryList.data[0].items.findIndex((item) =>
-					params.item.includes(item.item),
+					params.item.includes(item.item)
 				);
 
 				if (itemIndex === -1) {
@@ -506,7 +584,7 @@ export const carmyTools = (context: AgentContext) => {
 				return mealPlans.data
 					.map(
 						(mealPlan) =>
-							`- ${mealPlan.meal} on ${mealPlan.date}: ${mealPlan.recipe}`,
+							`- ${mealPlan.meal} on ${mealPlan.date}: ${mealPlan.recipe}`
 					)
 					.join("\n");
 			},
@@ -557,7 +635,7 @@ export const carmyTools = (context: AgentContext) => {
 				preferences: z
 					.array(z.string())
 					.describe(
-						"Food preferences, ex: vegetarian, vegan, pescatarian, no vegetables",
+						"Food preferences, ex: vegetarian, vegan, pescatarian, no vegetables"
 					),
 			}),
 			async execute(params) {
@@ -573,10 +651,73 @@ export const carmyTools = (context: AgentContext) => {
 		}),
 	};
 
-	return {
+	// Define types for the tool structure
+	type ToolExecuteFunction = (...args: unknown[]) => Promise<unknown>;
+
+	interface ToolDefinition {
+		description: string;
+		parameters: unknown;
+		execute: ToolExecuteFunction;
+		[key: string]: unknown;
+	}
+
+	type ToolsObject = Record<string, ToolDefinition>;
+
+	// Define the enhanced return type
+	interface EnhancedToolResult<T> {
+		data: T;
+		metadata: {
+			timestamp: string;
+			toolName: string;
+			[key: string]: unknown;
+		};
+	}
+
+	// Function to wrap tool execute methods with custom return value
+	const wrapToolExecute = <T extends ToolsObject>(toolObj: T): T => {
+		const enhancedTools = {} as T;
+
+		for (const [key, value] of Object.entries(toolObj)) {
+			if (typeof value === "object" && value !== null) {
+				// Create a new tool definition with the same properties
+				const enhancedTool = { ...value } as ToolDefinition;
+
+				// If it has an execute method, wrap it
+				if (typeof enhancedTool.execute === "function") {
+					const originalExecute = enhancedTool.execute;
+
+					// Replace with wrapped version
+					enhancedTool.execute = async function (...args: unknown[]) {
+						// Call original function
+						const result = await originalExecute.apply(this, args);
+						console.log(`
+						<observation>
+							${JSON.stringify(result)}
+						</observation>
+						`);
+						// Add custom return value
+						return [
+							"<observation>",
+							JSON.stringify(result),
+							"</observation>",
+						].join("\n");
+					};
+				}
+
+				enhancedTools[key as keyof T] = enhancedTool as T[keyof T];
+			} else {
+				// For non-object values, just copy them
+				enhancedTools[key as keyof T] = value as T[keyof T];
+			}
+		}
+
+		return enhancedTools;
+	};
+
+	// Apply the wrapper to all tools
+	return wrapToolExecute({
 		...personalTools,
 		scrapeUrl,
-		callAlbertAgent,
 		today,
-	};
+	});
 };
