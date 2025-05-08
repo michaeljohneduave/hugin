@@ -18,12 +18,14 @@ import type {
 	MessagePayload,
 } from "@hugin-bot/core/src/types";
 import type { APIGatewayProxyEvent } from "aws-lambda";
+import { omit } from "remeda";
 import { Resource } from "sst";
 import {
 	type ConnectionStorage,
 	createConnectionStorage,
 } from "./lib/connection-storage";
 import { verifyToken } from "./util";
+
 const apiClient = new ApiGatewayManagementApiClient({
 	endpoint: Resource.WebsocketApi.managementEndpoint,
 	maxAttempts: 0,
@@ -86,17 +88,17 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 		}
 		console.log(
 			"Joining rooms",
-			rooms.data.map((room) => room.roomId),
+			rooms.data.map((room) => room.roomId)
 		);
 		await Promise.all([
 			connectionStorage.refreshUserConnection(
 				verifiedToken.sub,
 				token,
-				connectionId,
+				connectionId
 			),
 			connectionStorage.addConnIdToRooms(
 				rooms.data.map((room) => room.roomId),
-				connectionId,
+				connectionId
 			),
 		]);
 
@@ -141,12 +143,12 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 						statusCode: 500,
 					};
 				}
-				console.log("Connection id", connectionId);
+				console.log("Ping Message Received", connectionId);
 				await Promise.allSettled([
 					connectionStorage.refreshUserConnection(
 						verifiedToken.sub,
 						payload.token,
-						connectionId,
+						connectionId
 					),
 					pong(connectionId),
 				]);
@@ -225,13 +227,13 @@ export const pong = (conn: string) => {
 				type: "pong",
 			}),
 			ConnectionId: conn,
-		}),
+		})
 	);
 };
 
 async function multiSendMsg(
 	message: ChatPayload | MessageEntityType,
-	connectionIds: string[],
+	connectionIds: string[]
 ) {
 	// TODO: AWS WS is limited to 128kb payloads
 	// We need to split long messages into smaller chunks
@@ -243,7 +245,7 @@ async function multiSendMsg(
 					new PostToConnectionCommand({
 						Data: JSON.stringify(message),
 						ConnectionId: conn,
-					}),
+					})
 				)
 				.catch(async (error: Error) => {
 					// Clean up connectionIds not deleted on disconnect
@@ -253,14 +255,14 @@ async function multiSendMsg(
 						if (connectionData) {
 							await connectionStorage.removeConnection(
 								conn,
-								connectionData.userId,
+								connectionData.userId
 							);
 						}
 						return;
 					}
 					throw error;
-				}),
-		),
+				})
+		)
 	);
 }
 
@@ -271,7 +273,7 @@ async function generateLLMResponse({
 	agentId,
 	user,
 }: {
-	message: MessageEntityType;
+	message: ChatPayload;
 	connectionIds: string[];
 	agentId: string;
 	user: {
@@ -291,9 +293,26 @@ async function generateLLMResponse({
 
 	const router = llmRouter[agentId as keyof typeof llmRouter];
 
-	const { response, error } = await router(message.threadId, {
-		userId: user.id,
-		userName: user.name,
+	const { response, error } = await router({
+		threadId: message.threadId,
+		context: {
+			userId: user.id,
+			userName: user.name,
+		},
+		sendMessage: async (msg) => {
+			const record = await MessageEntity.create({
+				roomId: message.roomId,
+				userId: agentId,
+				message: msg,
+				action: "message",
+				type: "llm",
+				replyToMessageId: message.messageId,
+				threadId: message.threadId,
+				mentions: [agentId],
+			}).go();
+
+			multiSendMsg(record.data, connectionIds);
+		},
 	})
 		.then((res) => ({
 			response: res,
@@ -305,6 +324,8 @@ async function generateLLMResponse({
 		}));
 
 	let text = "";
+	let metadata: MessageEntityType["metadata"];
+	// TODOS: Implement retry and send message + context into queue
 	if (error) {
 		console.error("Error generating LLM response", error);
 
@@ -314,8 +335,21 @@ async function generateLLMResponse({
 			text =
 				"An error occurred while generating the response. Please try again.";
 		}
+		metadata = {
+			responseDetails: {
+				tokenUsage: {
+					promptTokens: 0,
+					completionTokens: 0,
+					totalTokens: 0,
+				},
+				finishReason: "error",
+				steps: 0,
+			},
+			responseSteps: [],
+		};
 	} else if (response) {
-		text = response.text;
+		text = response.summary;
+		metadata = response.metadata;
 	}
 
 	const llmMessage = await MessageEntity.create({
@@ -327,14 +361,15 @@ async function generateLLMResponse({
 		replyToMessageId: message.messageId,
 		threadId: message.threadId,
 		mentions: [agentId],
+		metadata,
 	}).go();
 
-	await multiSendMsg(llmMessage.data, connectionIds);
+	await multiSendMsg(omit(llmMessage.data, ["metadata"]), connectionIds);
 }
 
 export const sendMessage = async (
 	payload: ChatPayload,
-	connectionId: string,
+	connectionId: string
 ) => {
 	const connectionData =
 		await connectionStorage.getConnectionData(connectionId);
@@ -342,25 +377,29 @@ export const sendMessage = async (
 		throw new Error("Connection data not found");
 	}
 
-	console.log("Connection data", connectionData);
-
 	const jwtPayload = decodeJwt(connectionData.token)
 		.payload as CustomJwtPayload;
 	const connectionIds = await connectionStorage.getRoomConnectionIds(
-		payload.roomId,
+		payload.roomId
 	);
 
-	console.log("Room members", connectionId, payload.roomId, connectionIds);
+	console.log(
+		"Room members",
+		payload.message,
+		connectionId,
+		payload.roomId,
+		connectionIds
+	);
 
-	payload.messageId = crypto.randomUUID();
+	payload.action = "message";
 	payload.threadId = payload.threadId || crypto.randomUUID();
+	payload.messageId = crypto.randomUUID();
 
 	// Note: For now we are waiting for the message to be created before sending it to the client
 	// This might be slower than sending the message immediately
 	// TODO: Measure the performance of this
 	await MessageEntity.create({
 		messageId: payload.messageId,
-		action: "message" as const,
 		userId: payload.userId,
 		message: payload.message,
 		imageFiles: payload.imageFiles,
@@ -368,6 +407,7 @@ export const sendMessage = async (
 		videoFiles: payload.videoFiles,
 		roomId: payload.roomId,
 		type: "user" as const,
+		action: payload.action,
 		replyToMessageId: payload.replyToMessageId,
 		mentions: payload.mentions,
 		// For now, we trust the frontend to send the correct threadId/replyToMessageId
@@ -419,7 +459,7 @@ export const disconnect = async (event: APIGatewayProxyEvent) => {
 		if (connectionData) {
 			await connectionStorage.removeConnection(
 				connectionId,
-				connectionData.userId,
+				connectionData.userId
 			);
 		}
 
