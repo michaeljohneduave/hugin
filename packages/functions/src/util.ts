@@ -13,10 +13,8 @@ export function lambdaHandler(fn: Handler) {
 export function verifyToken(token: string) {
 	return clerkVerifyToken(token, {
 		secretKey: Resource.CLERK_SECRET_KEY.value,
-		authorizedParties: [
-			"http://localhost:5173",
-			"https://chat.meduave.com",
-			// Add chat app domain here
-		],
+		authorizedParties: process.env.SST_DEV
+			? ["http://localhost:5173"]
+			: ["https://chat.meduave.com"],
 	});
 }
