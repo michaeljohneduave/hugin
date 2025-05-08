@@ -11,14 +11,14 @@ import type { AgentContext, ModeResultMap } from "../..";
 import { MessageEntity } from "../../../entities/message.dynamo";
 import { sleep } from "../../../utils";
 import { bigModel, bigThinkingModel, smolModel } from "../../config";
-import { carmyTools } from "./tools";
+import { carmyTools } from "./tools"; // Assuming carmyTools is defined elsewhere
 
 export const carmyPrompt = `
-# Name: Carmy
-# Role: Proactive and Organized Personal Culinary Assistant
+	# Name: Carmy
+	# Role: Proactive and Organized Personal Culinary Assistant
 
-## Primary Goal:
-To assist the user with comprehensive meal planning, recipe management, grocery list generation, and pantry organization. Act as an efficient and knowledgeable personal chef by **fully resolving user requests, which often requires executing a logical sequence of multiple tool calls within a single turn**, utilizing the available tools effectively and minimizing unnecessary intermediate questions.
+	## Primary Goal:
+	To assist the user with comprehensive meal planning, recipe management, grocery list generation, and pantry organization. Act as an efficient and knowledgeable personal chef by **fully resolving user requests, which often requires executing a logical sequence of multiple tool calls within a single turn**, utilizing the available tools effectively and minimizing unnecessary intermediate questions.
 
 ## Core Capabilities:
 1.  **Pantry Management:**
@@ -68,82 +68,56 @@ To assist the user with comprehensive meal planning, recipe management, grocery 
 *   **Properly Format Output:** When possible, lists should be formatted as markdown lists.
     `;
 
-		type EntityMessage = {
-	role: "user" | "assistant";
-	name: string;
-	content: string;
+export const summarizeSteps = async (steps: string) => {
+	const summarizerPrompt = `
+						You are summarizing the steps taken by an AI assistant to fulfill a user request.
+						Connect the following messages or steps into a coherent, natural-sounding response from the assistant's perspective.
+						Maintain the original first-person perspective and flow where possible.
+						Ensure lists are formatted using markdown list syntax (- item).
+						Convert URLs into markdown links ([Text](URL)).
+		
+						Here are the steps to summarize:
+						${steps}
+				`;
+
+	const response = await generateText({
+		model: bigModel,
+		temperature: 0.2,
+		system: `
+					You're task is to connect multiple messages or steps into a coherent message.
+					Keep the original first-person perspective and flow of the message.
+		
+					If you encounter lists, keep them as lists.
+					For example:
+					"item1, item2, item3"
+		
+					Should be converted into:
+					- item1
+					- item2
+					- item3
+		
+					If you encounter links or urls, use markdown links.
+					For example:
+					"https://www.google.com"
+		
+					It should be converted into:
+					[Google](https://www.google.com)
+				`,
+		prompt: summarizerPrompt,
+	});
+
+	return response.text;
 };
 
-export class CarmyAgent {
-	private context: AgentContext;
-	private tools: ToolSet;
-
-	constructor(context: AgentContext) {
-		this.context = context;
-		this.tools = carmyTools(context);
-	}
-
-	private logResponse(response: GenerateTextResult<typeof this.tools, string>) {
-		console.log("---Tool calling model----");
-		console.log("Response:", response.text);
-		console.log(
-			"Steps",
-			response.steps.map((step) => ({
-				step: step,
-			})),
-		);
-		console.log("-------");
-	}
-
-	async execute(messages: CoreMessage[]) {
-		const config = {
-			model: bigModel,
-			maxSteps: 10,
-			temperature: 0.2,
-			system: carmyPrompt,
-			messages,
-			tools: this.tools,
-		};
-		const response = await generateText(config);
-		this.logResponse(response);
-		return response;
-	}
-
-	async executeWithAssistant(messages: EntityMessage[]) {
-		const config = {
-			model: bigModel,
-			temperature: 0.2,
-			systemPrompt: `
-				${carmyPrompt}
-
-				- Follow the instructions of the helper.
-			`,
-			prompt: `
-				${messages
-					.map(
-						(message) => `
-					<${message.role}>
-						<name>
-							${message.name}
-						</name>
-						<content>
-							${message.content}
-						</content>
-					</${message.role}>
-				`,
-					)
-					.join("\n")}
-			`,
-		};
-		const response = await generateText(config);
-		this.logResponse(response);
-		return response;
-	}
-}
-
-// For backward compatibility
-export const carmyAgent = async (threadId: string, context: AgentContext) => {
-	const agent = new CarmyAgent(context);
+export const carmyAgent = async ({
+	threadId,
+	context,
+	sendMessage,
+}: {
+	threadId: string;
+	context: AgentContext;
+	sendMessage: (message: string) => void;
+}) => {
 	const messages = await MessageEntity.query
 		.byThread({
 			threadId: threadId,
@@ -155,6 +129,56 @@ export const carmyAgent = async (threadId: string, context: AgentContext) => {
 		content: message.message || "",
 	})) as CoreMessage[];
 
-	const response = await agent.execute(threadMessages);
-	return response;
+	// We will collect all steps (Thought, Action, Observation implicitly via results, Final Answer)
+	const responseSteps: {
+		type: "initial" | "tool-result" | "continue" | "final";
+		content: string;
+	}[] = [];
+
+	const response = await generateText({
+		model: bigModel, // Use a capable model that follows instructions well
+		maxSteps: 10, // Limit the number of steps to avoid infinite loops
+		temperature: 0.2,
+		system: carmyPrompt, // Use the ReAct-guided prompt
+		messages: threadMessages,
+		tools: carmyTools(context),
+		onStepFinish: (step) => {
+			// Log steps for debugging and visibility
+			console.log("---Start Step----");
+			console.log("stepType", step.stepType);
+			console.log("text", step.text); // Model's text output (potentially Thought or Final Answer)
+			console.log("toolCalls", step.toolCalls); // Action
+			console.log("toolResults", JSON.stringify(step.toolResults, null, 2)); // Observation
+			console.log(
+				"reasoningDetails",
+				JSON.stringify(step.reasoningDetails, null, 2),
+			);
+			console.log("finishReason", step.finishReason);
+			console.log("---End Step----");
+
+			if (step.text && step.finishReason !== "stop") {
+				responseSteps.push({ type: step.stepType, content: step.text }); // Capture model's text
+			}
+		},
+	});
+
+	if (response.text) {
+		responseSteps.push({ type: "final", content: response.text });
+	}
+
+	const summary = await summarizeSteps(
+		responseSteps.map((step) => step.content).join("\n\n"),
+	);
+
+	return {
+		summary,
+		metadata: {
+			responseSteps,
+			responseDetails: {
+				tokenUsage: response.usage,
+				finishReason: response.finishReason,
+				steps: responseSteps.length,
+			},
+		},
+	};
 };
