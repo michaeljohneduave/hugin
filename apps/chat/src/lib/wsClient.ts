@@ -311,14 +311,14 @@ export class WebSocketManager implements WebSocketClient {
 			// Code 1006 is "Abnormal Closure" - also common for network issues
 			// Avoid reconnecting if it was a clean, intentional close (code 1000)
 			// or if we are already in a reconnection backoff loop.
-			if (event.code !== 1000 && !this.isReconnecting) {
+			if (event.code !== 1000 && !this.ws?.CONNECTING) {
 				console.log(
 					"Unexpected closure detected, initiating reconnect sequence.",
 				);
 				this.handleReconnect();
 			} else {
 				console.log(
-					`Skipping reconnect sequence (Code: ${event.code}, isReconnecting: ${this.isReconnecting})`,
+					`Skipping reconnect sequence (Code: ${event.code}, isReconnecting: ${this.ws?.readyState === WebSocket.CONNECTING})`,
 				);
 				// Ensure flag is false if we are not starting a reconnect sequence
 				this.isReconnecting = false;
