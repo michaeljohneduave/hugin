@@ -1,4 +1,4 @@
-import { carmyAgent } from "./agents/carmy";
+import { carmyAgent } from "./agents/carmy/index.react";
 import { pearlAgent } from "./agents/pearl";
 
 export const llmRouter = {

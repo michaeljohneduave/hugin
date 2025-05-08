@@ -7,8 +7,7 @@ import {
 	timestamp,
 	vector,
 } from "drizzle-orm/pg-core";
-
-const GOOGLE_TEXT_EMBEDDING_SIZE = 768;
+import { GOOGLE_TEXT_EMBEDDING_SIZE } from "../ai/config";
 
 export const Contents = pgTable(
 	"contents",

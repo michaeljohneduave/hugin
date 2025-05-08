@@ -75,6 +75,54 @@ export const MessageEntity = new Entity(
 				type: ["message", "joinRoom", "leaveRoom"] as const,
 				required: true,
 			},
+			metadata: {
+				type: "map",
+				properties: {
+					responseDetails: {
+						type: "map",
+						properties: {
+							tokenUsage: {
+								type: "map",
+								properties: {
+									promptTokens: {
+										type: "number",
+									},
+									completionTokens: {
+										type: "number",
+									},
+									totalTokens: {
+										type: "number",
+									},
+								},
+							},
+							finishReason: {
+								// type LanguageModelV1FinishReason = 'stop' | 'length' | 'content-filter' | 'tool-calls' | 'error' | 'other' | 'unknown';
+								type: "string",
+							},
+							steps: {
+								type: "number",
+							},
+						},
+						required: true,
+					},
+					responseSteps: {
+						type: "list",
+						items: {
+							type: "map",
+							properties: {
+								type: {
+									// type: "initial" | "tool-result" | "continue" | "final";
+									type: "string",
+								},
+								content: {
+									type: "string",
+								},
+							},
+						},
+						required: true,
+					},
+				},
+			},
 			createdAt: {
 				type: "number",
 				default: () => Date.now(),
