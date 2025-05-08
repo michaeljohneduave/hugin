@@ -21,3 +21,4 @@ export const VAPID_PRIVATE_KEY = new sst.Secret("VAPID_PRIVATE_KEY");
 export const FIREBASE_PRIVATE_KEY = new sst.Secret("FIREBASE_PRIVATE_KEY");
 export const FIREBASE_CLIENT_EMAIL = new sst.Secret("FIREBASE_CLIENT_EMAIL");
 export const FIREBASE_PROJECT_ID = new sst.Secret("FIREBASE_PROJECT_ID");
+export const BRAVE_API_KEY = new sst.Secret("BRAVE_API_KEY");

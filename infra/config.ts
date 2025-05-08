@@ -1,6 +1,8 @@
 export const clerkPublishableKey = new sst.Linkable("ClerkPublishableKey", {
 	properties: {
-		key: "pk_test_cG9wdWxhci13ZWV2aWwtNDcuY2xlcmsuYWNjb3VudHMuZGV2JA",
+		key: $dev
+			? "pk_test_cG9wdWxhci13ZWV2aWwtNDcuY2xlcmsuYWNjb3VudHMuZGV2JA"
+			: "pk_live_Y2xlcmsubWVkdWF2ZS5jb20k",
 	},
 });
 

@@ -2,6 +2,7 @@ import { MessageTable, Postgres } from "./database";
 import { domain } from "./dns";
 import { puppeteerFn } from "./puppeteer";
 import {
+	BRAVE_API_KEY,
 	CLERK_SECRET_KEY,
 	FIREBASE_CLIENT_EMAIL,
 	FIREBASE_PRIVATE_KEY,
@@ -105,6 +106,7 @@ const wsFnLinks = [
 	MessageTable,
 	CLERK_SECRET_KEY,
 	puppeteerFn,
+	BRAVE_API_KEY,
 ];
 
 websocketApi.route("$connect", {
@@ -138,6 +140,21 @@ websocketApi.route("$default", {
 			architectures: ["arm64"],
 		},
 	},
+	// TODOS: This is temp, we will decouple the ws message handler for agent requests
+	// 30s is the max timeout for ws api gateway, we just give more time to the actual lambda
+	timeout: "300 seconds",
+	permissions: [
+		{
+			actions: ["execute-api:ManageConnections"],
+			effect: "allow",
+			resources: ["arn:aws:execute-api:*:*:*"],
+		},
+	],
+});
+
+export const agentResponseFn = new sst.aws.Function("AgentResponseFn", {
+	handler: "packages/functions/src/websocket.agentResponse",
+	link: [MessageTable, websocketApi],
 	permissions: [
 		{
 			actions: ["execute-api:ManageConnections"],
