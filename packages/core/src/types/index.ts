@@ -30,12 +30,14 @@ export interface User {
 	type: MessageEntityType["type"];
 }
 
-export type RoomEvent = MessageEntityType & {
+export type RoomPayload = MessageEntityType & {
+	action: "joinRoom" | "leaveRoom";
 	user: User;
 };
 
 // Both for regular user and bot
 export type ChatPayload = MessageEntityType & {
+	action: "message";
 	user: User;
 };
 
@@ -48,7 +50,11 @@ export type PongPayload = {
 	action: "pong";
 };
 
-export type MessagePayload = ChatPayload | PingPayload | PongPayload;
+export type MessagePayload =
+	| ChatPayload
+	| PingPayload
+	| PongPayload
+	| RoomPayload;
 
 export type AppRouter = typeof appRouter;
 export type RouterInput = inferRouterInputs<AppRouter>;
