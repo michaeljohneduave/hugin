@@ -8,18 +8,7 @@ import {
 import type { AgentContext } from "../..";
 import { MessageEntity } from "../../../entities/message.dynamo";
 import { bigModel } from "../../config";
-import type { carmyTools } from "../carmy/tools";
-import { queryVectorDb, searchUrlInDb, transformQuery } from "./query";
-import { scrapeUrl, scrapingTaskStatus } from "./scraping";
 import { pearlTools } from "./tools";
-
-type PearlToolsReturnType = ReturnType<typeof pearlTools>;
-
-// Map modes to their result types
-type ModeResultMap = {
-	stream: StreamTextResult<PearlToolsReturnType, string>;
-	generate: GenerateTextResult<PearlToolsReturnType, string>;
-};
 
 export const systemPrompt = `
 You are a intelligent task manager that can help users with their requests.
@@ -36,7 +25,15 @@ Your goal is to deliver the most effective assistance possible while keeping int
 If you can't help the user, say so.
 `;
 
-export async function pearlAgent(threadId: string, context: AgentContext) {
+export async function pearlAgent({
+	threadId,
+	context,
+	sendMessage,
+}: {
+	threadId: string;
+	context: AgentContext;
+	sendMessage: (message: string) => void;
+}) {
 	const tools = pearlTools(context);
 
 	const messages = await MessageEntity.query
@@ -53,11 +50,26 @@ export async function pearlAgent(threadId: string, context: AgentContext) {
 	const response = await generateText({
 		model: bigModel,
 		maxSteps: 10,
-		temperature: 0.5,
+		temperature: 0.1,
 		system: systemPrompt,
 		messages: threadMessages,
 		tools,
+		onStepFinish: (step) => {
+			if (step.text && step.finishReason !== "stop") {
+				sendMessage(step.text);
+			}
+		},
 	});
 
-	return response;
+	return {
+		summary: response.text,
+		metadata: {
+			responseDetails: {
+				tokenUsage: response.usage,
+				finishReason: response.finishReason,
+				steps: 0,
+			},
+			responseSteps: [],
+		},
+	};
 }

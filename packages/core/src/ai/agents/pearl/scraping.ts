@@ -3,59 +3,23 @@ import getSitemap from "@hugin-bot/functions/src/lib/puppeteer/utils/getSitemap"
 import { tool } from "ai";
 import { Resource } from "sst";
 import { z } from "zod";
-import { storePriorityUrls } from "../../libs";
-
-export const scrapeUrl_OLD = tool({
-	description: `
-    Scrapes the website for content and returns the status and id of the task.
-		Use this tool when the intent is clear and there is a URL present.
-  `,
-	parameters: z.object({
-		urlset: z.array(
-			z.object({
-				url: z.string().describe("Url from the user"),
-				purpose: z
-					.string()
-					.describe("Purpose or what the user wants to get from the website"),
-			}),
-		),
-	}),
-	execute: async (params, toolOpts) => {
-		for (const item of params.urlset) {
-			const sitemapUrls = await getSitemap(item.url);
-
-			await storePriorityUrls(
-				item.url,
-				sitemapUrls.map((url) => ({ url })),
-				item.purpose,
-			);
-		}
-
-		const lambda = new LambdaClient({});
-		const command = new InvokeCommand({
-			FunctionName: Resource.Puppeteer.name,
-		});
-
-		const response = await lambda.send(command);
-
-		const payload = JSON.parse(new TextDecoder().decode(response.Payload));
-	},
-});
 
 export const scrapeUrl = tool({
 	description: `
-    Scrapes the website for a specific purpose/s.
-		To use this tool effectively. Provide the url and a verbose description of what you want to get from the website.
+    Scrapes the one or more websites for a specific purpose/s.
+		To use this tool effectively. Provide the urls and a verbose descriptions of what you want to get from the website.
   `,
 	parameters: z.object({
-		urlset: z.array(
-			z.object({
-				url: z.string().describe("Url from the user"),
-				purpose: z
-					.string()
-					.describe("Purpose or what you want to get from the website"),
-			}),
-		),
+		urlset: z
+			.array(
+				z.object({
+					url: z.string().describe("Url from the user"),
+					purpose: z
+						.string()
+						.describe("Purpose or what you want to get from the website"),
+				}),
+			)
+			.max(100),
 	}),
 	execute: async (params, toolOpts) => {
 		const lambda = new LambdaClient({});
