@@ -244,7 +244,8 @@ const chats = router({
 		.input(
 			z.object({
 				roomId: z.string(),
-				limit: z.number().default(1000),
+				limit: z.number().default(20),
+				messageCursor: z.string().optional(),
 			}),
 		)
 		.query(async ({ input }) => {
@@ -253,7 +254,9 @@ const chats = router({
 					.primary({
 						roomId: input.roomId,
 					})
-					.go(),
+					.go({
+						pages: "all",
+					}),
 				MessageEntity.query
 					.byRoom({
 						roomId: input.roomId,
@@ -261,6 +264,20 @@ const chats = router({
 					.go({
 						limit: input.limit,
 						order: "desc",
+						cursor: input.messageCursor,
+						attributes: [
+							"userId",
+							"messageId",
+							"roomId",
+							"threadId",
+							"action",
+							"type",
+							"message",
+							"replyToMessageId",
+							"mentions",
+							"createdAt",
+							"updatedAt",
+						],
 					}),
 			]);
 
@@ -269,7 +286,19 @@ const chats = router({
 			return {
 				members: members.data,
 				messages: messages.data,
+				messageCursor: messages.cursor,
 			};
+		}),
+	getMessageContext: protectedProcedure
+		.input(z.string())
+		.query(async ({ input }) => {
+			const message = await MessageEntity.query
+				.primary({
+					messageId: input,
+				})
+				.go();
+
+			return message.data[0].metadata;
 		}),
 });
 
