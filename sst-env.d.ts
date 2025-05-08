@@ -9,9 +9,17 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "AgentResponseFn": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "Api": {
       "type": "sst.aws.ApiGatewayV2"
       "url": string
+    }
+    "BRAVE_API_KEY": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "CLERK_SECRET_KEY": {
       "type": "sst.sst.Secret"

@@ -31,11 +31,11 @@ export default $config({
 
 		const dns = await import("./infra/dns");
 		const api = await import("./infra/api");
+		const database = await import("./infra/database");
 		await import("./infra/local");
 		const { clerkPublishableKey, firebaseConfig } = await import(
 			"./infra/config"
 		);
-
 		const chatSite = new sst.aws.StaticSite("ChatSite", {
 			path: "apps/chat",
 			build: {
@@ -65,6 +65,7 @@ export default $config({
 			ApiUrl: api.api.url,
 			WsUrl: api.websocketApi.url,
 			Chat: chatSite.url,
+			DynamoDb: database.MessageTable.name,
 		};
 	},
 });
