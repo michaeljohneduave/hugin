@@ -489,7 +489,7 @@ onUnmounted(() => {
           isUser
             ? 'bg-indigo-600 text-primary-foreground'
             : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white',
-          (message.imageFiles?.length ?? 0 > 0) || isMessageCodeBlock ? 'p-0' : 'px-2 py-1',
+          (message.imageFiles?.length ?? 0 > 0) || isMessageCodeBlock ? 'p-0' : 'px-2 py-2',
           // Adjust corners based on position in group
           isFirstInGroup ? 'rounded-lg' : '',
           !isFirstInGroup ? 'rounded-lg' : '',
@@ -526,7 +526,9 @@ onUnmounted(() => {
         </div>
 
         <!-- Message text -->
-        <div v-if="message.message" class="text break-words max-w-none prose-sm" v-html="renderContent"></div>
+        <div v-if="message.message"
+          class="text-sm/4 break-words max-w-none prose-sm prose-p:text-sm/4 prose-li:text-sm/4" v-html="renderContent">
+        </div>
 
         <!-- Image/GIF files -->
         <div v-if="message.imageFiles && message.imageFiles.length > 0" class="space-y-1">

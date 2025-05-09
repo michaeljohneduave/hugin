@@ -131,14 +131,6 @@ const scrollToBottom = (force = false) => {
 	});
 };
 
-const handleScroll = () => {
-	if (!messagesContainer.value) return;
-
-	const { scrollTop, scrollHeight, clientHeight } = messagesContainer.value;
-	// Consider "bottom" if within 100px of the bottom
-	isScrolledToBottom.value = scrollHeight - scrollTop - clientHeight < 100;
-};
-
 const fetchMessages = async (roomId: string) => {
 	try {
 		isLoadingMessages.value = true;
@@ -269,10 +261,6 @@ const handleOutsideClick = (event: MouseEvent) => {
 	}
 };
 
-// watch(chatMessages, () => {
-// 	scrollToBottom(true);
-// });
-
 // Check for @mentions
 watch(messageInput, (newValue) => {
 	const lastAtIndex = newValue.lastIndexOf("@");
@@ -320,8 +308,7 @@ onUnmounted(() => {
 					<span class="text-xs text-gray-400 dark:text-gray-500 -mt-1">v{{ version }}</span>
 				</div>
 				<div class="flex items-center">
-					<span class="inline-flex h-2 w-2 rounded-full mr-1"
-						:class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
+					<span class="inline-flex h-2 w-2 rounded-full mr-1" :class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
 					<span class="text-xs text-gray-500 dark:text-gray-400">{{ isOnline ? 'Connected' : 'Disconnected'
 					}}</span>
 				</div>
@@ -333,8 +320,7 @@ onUnmounted(() => {
 				<div class="relative user-menu-container">
 					<button @click="isUserMenuOpen = !isUserMenuOpen"
 						class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-						<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24"
-							stroke="currentColor">
+						<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
 						</svg>
 					</button>
