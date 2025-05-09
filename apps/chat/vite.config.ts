@@ -19,24 +19,25 @@ export default defineConfig({
 		tailwindcss(),
 		vueDevTools(),
 		VitePWA({
+			// mode: "development",
+			base: "/",
+			injectRegister: "auto",
 			strategies: "injectManifest",
-			injectManifest: {
-				maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
-			},
+			registerType: "prompt",
 			srcDir: "src/sw",
-			filename: "service-worker.js",
-			registerType: "autoUpdate",
-			devOptions: {
-				enabled: true,
-				type: "module",
+			filename: "service-worker.ts",
+			injectManifest: {
+				minify: false,
+				// enableWorkboxModulesLogs: true,
+				// maximumFileSizeToCacheInBytes: 10 * 1024 * 1024, // 10MB
 			},
 			includeAssets: ["favicon.ico", "apple-touch-icon.png", "masked-icon.png"],
 			manifest: {
 				name: "Pearl",
 				short_name: "Pearl",
 				description: "Pearl, your life assistant",
-				theme_color: "#ffffff",
-				background_color: "#ffffff",
+				theme_color: "#4a4a4a",
+				background_color: "#4a4a4a",
 				display: "standalone",
 				orientation: "portrait",
 				start_url: "/",
@@ -52,7 +53,19 @@ export default defineConfig({
 						type: "image/png",
 						purpose: "any maskable",
 					},
+					{
+						src: "/pwa-icon-monochrome-192x192.png",
+						sizes: "192x192",
+						type: "image/png",
+						purpose: "monochrome",
+					},
 				],
+			},
+			devOptions: {
+				enabled: true,
+				type: "module",
+				navigateFallback: "/index.html",
+				suppressWarnings: true,
 			},
 		}),
 		sentryVitePlugin({

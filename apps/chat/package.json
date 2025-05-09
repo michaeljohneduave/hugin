@@ -51,7 +51,9 @@
     "vite-plugin-vue-devtools": "^7.7.2",
     "vue-tsc": "^2.2.8",
     "workbox-build": "^7.3.0",
+    "workbox-core": "^7.3.0",
     "workbox-precaching": "^7.3.0",
+    "workbox-routing": "^7.3.0",
     "workbox-sw": "^7.3.0",
     "workbox-window": "^7.3.0"
   }

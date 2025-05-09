@@ -19,14 +19,17 @@ export function useNotification() {
 		const id = Math.random().toString(36).substring(2, 9);
 		const newNotification = {
 			id,
-			closeable: true,
 			duration: 5000, // Default duration of 5 seconds
 			...notification,
 		};
 
 		notifications.value.push(newNotification);
 
-		if (newNotification.duration && newNotification.duration > 0) {
+		if (newNotification.duration === Number.POSITIVE_INFINITY) {
+			return id;
+		}
+
+		if (newNotification.duration > 0) {
 			setTimeout(() => {
 				remove(id);
 			}, newNotification.duration);
@@ -49,28 +52,28 @@ export function useNotification() {
 	// Convenience methods for different notification types
 	const success = (
 		message: string,
-		options?: Partial<Omit<Notification, "id" | "type" | "message">>,
+		options?: Partial<Omit<Notification, "id" | "type" | "message">>
 	) => {
 		return show({ type: "success", message, ...options });
 	};
 
 	const error = (
 		message: string,
-		options?: Partial<Omit<Notification, "id" | "type" | "message">>,
+		options?: Partial<Omit<Notification, "id" | "type" | "message">>
 	) => {
 		return show({ type: "error", message, ...options });
 	};
 
 	const info = (
 		message: string,
-		options?: Partial<Omit<Notification, "id" | "type" | "message">>,
+		options?: Partial<Omit<Notification, "id" | "type" | "message">>
 	) => {
 		return show({ type: "info", message, ...options });
 	};
 
 	const warning = (
 		message: string,
-		options?: Partial<Omit<Notification, "id" | "type" | "message">>,
+		options?: Partial<Omit<Notification, "id" | "type" | "message">>
 	) => {
 		return show({ type: "warning", message, ...options });
 	};

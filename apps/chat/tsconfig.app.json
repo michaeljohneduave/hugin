@@ -16,7 +16,13 @@
       ]
     },
     "types": [
-      "vue-router"
+      "vue-router",
+      "vite-plugin-pwa/vue",
+    ],
+    "lib": [
+      "DOM",
+      "DOM.Iterable",
+      "WebWorker"
     ]
   }
 }

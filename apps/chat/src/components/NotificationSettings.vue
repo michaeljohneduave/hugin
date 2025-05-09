@@ -5,14 +5,10 @@ import { onMounted, ref } from "vue";
 import { useNotification } from "../composables/useNotification";
 import { usePushNotification } from "../composables/usePushNotification";
 
-const { isSupported, token, requestPermission, unsubscribe, testPushNotification, checkNotificationPermission, initialize, isLoading, isRegistering, setupPushNotifications } = usePushNotification()
+const { isSupported, token, initialize, unsubscribe, testPushNotification, checkNotificationPermission, isLoading, isRegistering, initFirebase } = usePushNotification()
 const notification = useNotification()
 const permissionStatus = ref<NotificationPermission | 'unsupported'>('default')
 const { session } = useSession();
-
-async function checkPermission() {
-  permissionStatus.value = await checkNotificationPermission()
-}
 
 async function toggleNotifications() {
   if (!session.value?.user.id) {
@@ -23,29 +19,7 @@ async function toggleNotifications() {
     if (token.value) {
       await unsubscribe()
     } else {
-      // Check current permission status first
-      const currentPermission = await checkNotificationPermission()
-
-      if (currentPermission === "denied") {
-        notification.info(
-          "It looks like notifications are currently blocked. To enable them, please click the lock/info icon in your browser's address bar and allow notifications for this site."
-        )
-        return
-      }
-
-      const permission = await requestPermission();
-
-      if (permission === "granted") {
-        // Initialize push notifications
-        const success = await setupPushNotifications(session.value?.user.id);
-        if (success) {
-          notification.success("Notifications enabled successfully!");
-        } else {
-          notification.error("Failed to enable notifications. Please try again.");
-        }
-      } else {
-        notification.error("Permission to send notifications was denied");
-      }
+      await initialize(session.value?.user.id);
     }
   } catch (error) {
     console.error('Error toggling notifications:', error)
@@ -62,7 +36,6 @@ async function sendTestNotification() {
 }
 
 onMounted(() => {
-  checkPermission()
 })
 </script>
 
@@ -140,7 +113,7 @@ onMounted(() => {
         </button>
       </div>
 
-      <div v-if="token" class="space-y-4">
+      <div v-if="token && !isLoading && !isRegistering" class="space-y-4">
         <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
           <div class="flex items-start">
             <div class="flex-shrink-0">
