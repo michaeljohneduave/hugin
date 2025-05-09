@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import carmyAvatar from "@/assets/carmy-avatar.webp";
 import loebotteAvatar from "@/assets/loebotte-avatar.webp";
-import pearlAvatar from "@/assets/pearl-avatar.webp";
+import pearlAvatar from "@/assets/pearl.svg";
 import MessageComponent from "@/components/Message.vue";
 import RoomEventComponent from "@/components/RoomEvent.vue";
 import { useWebsocket } from "@/composables/useWebsocket";
