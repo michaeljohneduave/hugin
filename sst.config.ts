@@ -28,7 +28,6 @@ export default $config({
 		// 	const result = await import(`./infra/${value}`);
 		// 	if (result.outputs) Object.assign(outputs, result.outputs);
 		// }
-
 		const dns = await import("./infra/dns");
 		const api = await import("./infra/api");
 		const database = await import("./infra/database");
@@ -38,6 +37,20 @@ export default $config({
 		);
 		const chatSite = new sst.aws.StaticSite("ChatSite", {
 			path: "apps/chat",
+			assets: {
+				fileOptions: [
+					{
+						files: ["service-worker.js", "index.html"],
+						cacheControl: "no-cache",
+					},
+					{
+						files: "**/*",
+						cacheControl: "max-age=31536000, immutable",
+					},
+				],
+				purge: true,
+			},
+			indexPage: "/",
 			build: {
 				command: "npm run build",
 				output: "dist",

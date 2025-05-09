@@ -1,5 +1,4 @@
 import "./assets/global.css";
-
 import { clerkPlugin } from "@clerk/vue";
 import * as Sentry from "@sentry/vue";
 import { QueryClient, VueQueryPlugin } from "@tanstack/vue-query";
@@ -18,6 +17,7 @@ Sentry.init({
 	// Setting this option to true will send default PII data to Sentry.
 	// For example, automatic IP address collection on events
 	sendDefaultPii: true,
+	environment: import.meta.env.MODE,
 	tracesSampleRate: 1.0,
 	tracePropagationTargets: ["localhost", /^https:\/\/hugin-api.meduave.com/],
 });
