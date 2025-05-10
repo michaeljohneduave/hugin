@@ -7,7 +7,8 @@ import { useNotification } from "./composables/useNotification";
 
 const visualViewport = window.visualViewport;
 let debouncedResize: ReturnType<typeof funnel>;
-const keyboardHidden = ref(true);
+const keyboardVisible = ref(false);
+const viewportHieght = window.innerHeight;
 const notif = useNotification();
 const {
 	needRefresh,
@@ -22,8 +23,15 @@ const {
 	},
 })
 
-function handleResize() {
-	keyboardHidden.value = !keyboardHidden.value;
+function updateKeyboardStatus() {
+	if (visualViewport) {
+		const KEYBOARD_HEIGHT_THRESHOLD_PX = 150;
+		const isKeyboardCurrentlyVisible =
+			(viewportHieght - visualViewport.height) > KEYBOARD_HEIGHT_THRESHOLD_PX;
+		keyboardVisible.value = isKeyboardCurrentlyVisible;
+	} else {
+		keyboardVisible.value = false;
+	}
 }
 
 function visualportResize() {
@@ -46,7 +54,7 @@ watch(needRefresh, (newVal) => {
 onMounted(() => {
 	debouncedResize = funnel(
 		() => {
-			handleResize();
+			updateKeyboardStatus();
 		},
 		{
 			minGapMs: 500,
@@ -56,6 +64,7 @@ onMounted(() => {
 
 	if (visualViewport) {
 		visualViewport.addEventListener("resize", visualportResize);
+		updateKeyboardStatus();
 	}
 });
 
@@ -67,7 +76,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div class="h-dvh bg-gray-100 dark:bg-gray-900 flex flex-col" :class="{ 'p-safe': keyboardHidden }">
+	<div class="h-dvh bg-gray-100 dark:bg-gray-900 flex flex-col" :class="{ 'pb-safe': !keyboardVisible }">
 		<router-view></router-view>
 		<NotificationContainer />
 	</div>

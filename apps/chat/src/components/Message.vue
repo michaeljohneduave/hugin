@@ -889,12 +889,12 @@ onUnmounted(() => {
   background-color: rgba(175, 184, 193, 0.2);
   border-radius: 6px;
   font-family: 'Fira Code', monospace;
-  color: #24292e;
+  color: var(--primary-foreground);
 }
 
 :deep(.dark code:not(.code-block code)) {
   background-color: rgba(255, 255, 255, 0.1);
-  color: #e1e1e1;
+  color: var(--primary-foreground);
 }
 
 /* Add smooth transition for sliding */
