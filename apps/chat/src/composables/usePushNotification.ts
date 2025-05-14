@@ -1,6 +1,6 @@
 import { useSession } from "@clerk/vue";
 import { getToken, onMessage } from "firebase/messaging";
-import { onMounted, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { onUnmounted, watch } from "vue";
 import { messaging } from "../lib/firebase";
 import { useTrpc } from "../lib/trpc";
@@ -16,38 +16,24 @@ interface TokenInfo {
 	timestamp: number;
 }
 
-interface FirebaseMessagePayload {
-	notification: {
-		title: string;
-		body: string;
-		data?: Record<string, string>;
-	};
+interface State {
+	token: string | null;
+	isLoading: boolean;
+	isRegistering: boolean;
+	isSupported: boolean;
 }
 
-interface NotificationAction {
-	action: string;
-	title: string;
-}
-
-interface ExtendedNotificationOptions extends NotificationOptions {
-	actions?: NotificationAction[];
-}
-
-interface ExtendedNotification extends Notification {
-	onactionclick?: (event: { action: string }) => void;
-}
-
-interface InAppNotificationOptions {
-	onClick?: () => void;
-}
+const state = reactive<State>({
+	token: null,
+	isLoading: false,
+	isRegistering: false,
+	isSupported: false,
+});
 
 export function usePushNotification() {
 	const notification = useNotification();
 	const { session } = useSession();
 	const trpc = useTrpc();
-	const token = ref<string | null>(null);
-	const isLoading = ref(false);
-	const isRegistering = ref(false);
 	let foregroundUnsubscribe: (() => void) | null = null;
 
 	const isSupported = ref(
@@ -81,33 +67,14 @@ export function usePushNotification() {
 			timestamp: Date.now(),
 		};
 		localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(tokenInfo));
-		token.value = newToken;
+		state.token = newToken;
 	}
 
-	function removeToken(): void {
+	function removeToken(): string | null {
+		const token = state.token;
 		localStorage.removeItem(TOKEN_STORAGE_KEY);
-		token.value = null;
-	}
-
-	// Token Generation and Registration
-	async function generateToken(
-		registration: ServiceWorkerRegistration
-	): Promise<string | null> {
-		try {
-			const newToken = await getToken(messaging, {
-				vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
-				serviceWorkerRegistration: registration,
-			});
-
-			if (!newToken) {
-				throw new Error("Failed to generate FCM token");
-			}
-
-			return newToken;
-		} catch (error) {
-			console.error("[Firebase Messaging] Error generating token:", error);
-			return null;
-		}
+		state.token = null;
+		return token;
 	}
 
 	async function saveTokenToDb(
@@ -121,49 +88,16 @@ export function usePushNotification() {
 			});
 			return true;
 		} catch (error) {
-			console.error("[Firebase Messaging] Error registering token:", error);
+			console.error("[Push Notification] Error registering token:", error);
 			return false;
 		}
 	}
 
-	async function unregisterToken(
-		newToken: string,
-		userId: string
-	): Promise<boolean> {
-		try {
-			await trpc.notifications.deletePushSubscription.mutate({
-				userId,
-				token: newToken,
-			});
-			removeToken();
-			return true;
-		} catch (error) {
-			console.error("[Firebase Messaging] Error unregistering token:", error);
-			return false;
-		}
-	}
-
-	async function requestPermission(): Promise<NotificationPermission> {
-		console.log("[Debug] Starting notification permission request");
-		if (!isSupported.value) {
-			console.error("[Debug] Push notifications not supported");
-			notification.error(
-				"Push notifications are not supported in this browser"
-			);
-			return "denied";
-		}
-
-		if (!session.value?.user.id) {
-			console.error("[Debug] User not logged in");
-			notification.error("You must be logged in to enable notifications");
-			return "denied";
-		}
-
-		const permission = await Notification.requestPermission();
-		if (permission !== "granted") {
-			return "denied";
-		}
-		return "granted";
+	async function removeTokenFromDb(newToken: string, userId: string) {
+		await trpc.notifications.deletePushSubscription.mutate({
+			userId,
+			token: newToken,
+		});
 	}
 
 	/**
@@ -175,11 +109,11 @@ export function usePushNotification() {
 	 */
 	function setupForegroundHandler() {
 		foregroundUnsubscribe = onMessage(messaging, (payload) => {
-			console.log("[Debug] Received foreground message:", payload);
+			console.log("[Push Notification] Received foreground message:", payload);
 			const { data } = payload;
 
 			if (!data) {
-				console.error("[Debug] No data in foreground message");
+				console.error("[Push Notification] No data in foreground message");
 				return;
 			}
 
@@ -207,17 +141,20 @@ export function usePushNotification() {
 		}
 
 		try {
-			console.log("[Debug] Testing push notification...");
+			console.log("[Push Notification] Testing push notification...");
 			await trpc.notifications.sendPushNotification.mutate({
 				userId: session.value.user.id,
 				title: "Test Notification",
 				body: msg,
 				url: "/",
 			});
-			console.log("[Debug] Push notification sent successfully");
+			console.log("[Push Notification] Push notification sent successfully");
 			// notification.success("Test notification sent successfully");
 		} catch (error) {
-			console.error("[Debug] Error sending test notification:", error);
+			console.error(
+				"[Push Notification] Error sending test notification:",
+				error
+			);
 			if (error instanceof Error) {
 				notification.error(
 					`Failed to send test notification: ${error.message}`
@@ -228,23 +165,14 @@ export function usePushNotification() {
 		}
 	}
 
-	async function checkNotificationPermission() {
-		if (!isSupported.value) {
-			console.log("[FCM Messaging] Push notifications not supported");
-			return "unsupported";
-		}
-
-		const permission = await Notification.permission;
-		console.log("[Debug] Current notification permission:", permission);
-		return permission;
-	}
-
-	async function initFirebase(userId: string): Promise<boolean> {
+	async function initFirebase(userId: string): Promise<string | null> {
 		try {
 			const registration = await navigator.serviceWorker.getRegistration();
 			if (!registration) {
-				console.error("[Debug] No service worker registration found");
-				return false;
+				console.error(
+					"[Push Notification] No service worker registration found"
+				);
+				return null;
 			}
 
 			// Send Firebase config to service worker
@@ -253,34 +181,44 @@ export function usePushNotification() {
 			});
 
 			// Generate and register token
-			const newToken = await generateToken(registration);
-			if (!newToken) return false;
+			const newToken = await getToken(messaging, {
+				vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+				serviceWorkerRegistration: registration,
+			});
 
-			token.value = newToken;
+			if (!newToken) {
+				throw new Error("Failed to generate FCM token");
+			}
 
-			// Set up foreground message handler
 			setupForegroundHandler();
 
-			return await saveTokenToDb(newToken, userId);
+			state.token = newToken;
+			await saveTokenToDb(newToken, userId);
+			storeToken(newToken);
+			return newToken;
 		} catch (error) {
 			console.error(
 				"[Firebase Messaging] Error setting up push notifications:",
 				error
 			);
-			return false;
+			return null;
 		}
 	}
 
-	async function initialize(userId: string) {
+	async function enableNotifications() {
 		try {
-			isRegistering.value = true;
+			const userId = session.value!.user.id;
+			state.isRegistering = true;
 
 			// Check current permission status
 			const currentPermission = await Notification.permission;
-
+			console.log(
+				"[Push Notification] Current notification permission:",
+				currentPermission
+			);
 			switch (currentPermission) {
 				case "granted":
-					console.log("[FCM Messaging] Permission granted, Init Firebase");
+					// console.log("[FCM Messaging] Permission granted, Init Firebase");
 					await initFirebase(userId);
 					break;
 				case "denied":
@@ -302,17 +240,10 @@ export function usePushNotification() {
 							duration: 10000,
 							closeable: true,
 							onClick: async () => {
-								// Second tier: Show browser permission prompt
-								const permission = await Notification.requestPermission();
-								if (permission === "granted") {
-									const success = await initFirebase(userId);
-									if (success) {
-										notification.success("Notifications enabled successfully!");
-									} else {
-										notification.error(
-											"Failed to enable notifications. Please try again."
-										);
-									}
+								const token = await initFirebase(userId);
+
+								if (token) {
+									notification.success("Notifications enabled successfully!");
 								} else {
 									notification.error(
 										"Permission to send notifications was denied"
@@ -323,17 +254,18 @@ export function usePushNotification() {
 					);
 			}
 		} catch (error) {
-			console.error("[Firebase Messaging] Error initializing:", error);
-			return false;
+			console.error("[Push Notification] Error initializing:", error);
 		} finally {
-			isRegistering.value = false;
+			state.isRegistering = false;
 		}
 	}
 
-	async function unsubscribe() {
+	async function disableNotifications() {
 		try {
-			isLoading.value = true;
-			console.log("[Debug] Unsubscribing from push notifications...");
+			state.isLoading = true;
+			console.log(
+				"[Push Notification] Unsubscribing from push notifications..."
+			);
 
 			if (!session.value?.user.id) {
 				throw new Error("User not logged in");
@@ -344,14 +276,15 @@ export function usePushNotification() {
 				vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
 				serviceWorkerRegistration: registration,
 			});
-			await unregisterToken(currentToken, session.value.user.id);
-			token.value = null;
+			await removeTokenFromDb(currentToken, session.value.user.id);
 
-			console.log("[Debug] Successfully unsubscribed from push notifications");
+			console.log(
+				"[Push Notification] Successfully unsubscribed from push notifications"
+			);
 			notification.success("Push notifications disabled successfully");
 		} catch (error) {
 			console.error(
-				"[Debug] Error unsubscribing from push notifications:",
+				"[Push Notification] Error unsubscribing from push notifications:",
 				error
 			);
 			if (error instanceof Error) {
@@ -363,63 +296,61 @@ export function usePushNotification() {
 			}
 			throw error;
 		} finally {
-			isLoading.value = false;
+			removeToken();
+			state.isLoading = false;
+		}
+	}
+
+	async function handleLogout() {
+		const currentToken = removeToken();
+
+		if (currentToken) {
+			await removeTokenFromDb(currentToken, session.value!.user.id);
 		}
 	}
 
 	function swMessageHandler(event: MessageEvent) {
 		switch (event.data.type) {
 			case "FIREBASE_TOKEN_REFRESH":
-				console.log("[Debug] Token refreshed:", event.data.token);
+				console.log("[Push Notification] Token refreshed:", event.data.token);
 				storeToken(event.data.token);
+				break;
+			case "FIREBASE_PUSH_MESSAGE":
+				console.log(
+					"[Push Notification] Push message received:",
+					event.data.payload
+				);
 				break;
 		}
 	}
 
-	// Watch for user changes
-	watch(
-		() => session.value?.user.id,
-		async (newUserId) => {
-			if (newUserId) {
-				await initialize(newUserId);
-			} else {
-				removeToken();
-			}
-		},
-		{ immediate: true }
-	);
-
 	onMounted(() => {
+		const token = getStoredToken();
+
+		if (token) {
+			state.token = token;
+		}
+
 		if (isSupported.value) {
 			navigator.serviceWorker.addEventListener("message", swMessageHandler);
 		} else {
-			console.error("[Debug] Push notifications not supported");
+			console.error("[Push Notification] Push notifications not supported");
 		}
 	});
 
 	// Cleanup on unmount
-	onUnmounted(async () => {
+	onUnmounted(() => {
 		if (foregroundUnsubscribe) {
 			foregroundUnsubscribe();
-		}
-		if (session.value?.user.id) {
-			const currentToken = getStoredToken();
-			if (currentToken) {
-				await unregisterToken(currentToken, session.value.user.id);
-			}
 		}
 	});
 
 	return {
 		isSupported,
-		token,
-		requestPermission,
+		state,
 		testPushNotification,
-		checkNotificationPermission,
-		unsubscribe,
-		initialize,
-		isLoading,
-		isRegistering,
-		initFirebase,
+		disableNotifications,
+		handleLogout,
+		enableNotifications,
 	};
 }

@@ -1,13 +1,11 @@
 <script setup lang="ts">
 import { useSession } from '@clerk/vue';
 import { BellIcon, BellOffIcon, CheckCircleIcon, Loader2Icon, XCircleIcon } from 'lucide-vue-next';
-import { onMounted, ref } from "vue";
 import { useNotification } from "../composables/useNotification";
 import { usePushNotification } from "../composables/usePushNotification";
 
-const { isSupported, token, initialize, unsubscribe, testPushNotification, checkNotificationPermission, isLoading, isRegistering, initFirebase } = usePushNotification()
+const { isSupported, state, enableNotifications, disableNotifications, testPushNotification } = usePushNotification()
 const notification = useNotification()
-const permissionStatus = ref<NotificationPermission | 'unsupported'>('default')
 const { session } = useSession();
 
 async function toggleNotifications() {
@@ -16,10 +14,10 @@ async function toggleNotifications() {
   }
 
   try {
-    if (token.value) {
-      await unsubscribe()
+    if (state.token) {
+      await disableNotifications()
     } else {
-      await initialize(session.value?.user.id);
+      await enableNotifications();
     }
   } catch (error) {
     console.error('Error toggling notifications:', error)
@@ -35,8 +33,6 @@ async function sendTestNotification() {
   }
 }
 
-onMounted(() => {
-})
 </script>
 
 <template>
@@ -92,7 +88,7 @@ onMounted(() => {
         <div>
           <h3 class="font-medium dark:text-white">Enable Notifications</h3>
           <p class="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            {{ token
+            {{ state.token
               ? 'You will receive notifications for new messages'
               : 'Click to enable browser notifications'
             }}
@@ -100,20 +96,21 @@ onMounted(() => {
         </div>
         <button @click="toggleNotifications"
           class="px-4 py-2 rounded-md transition-colors flex items-center gap-2 min-w-[120px] justify-center"
-          :disabled="isLoading || isRegistering" :class="[
-            token
+          :disabled="state.isLoading || state.isRegistering" :class="[
+            state.token
               ? 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900 dark:text-red-300 dark:hover:bg-red-800'
               : 'bg-blue-100 text-blue-700 hover:bg-blue-200 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800',
-            (isLoading || isRegistering) && 'opacity-75 cursor-not-allowed'
+            (state.isLoading || state.isRegistering) && 'opacity-75 cursor-not-allowed'
           ]">
-          <Loader2Icon v-if="isLoading || isRegistering" class="w-4 h-4 animate-spin" />
-          <BellIcon v-else-if="!token" class="w-4 h-4" />
+          <Loader2Icon v-if="state.isLoading || state.isRegistering" class="w-4 h-4 animate-spin" />
+          <BellIcon v-else-if="!state.token" class="w-4 h-4" />
           <BellOffIcon v-else class="w-4 h-4" />
-          {{ isLoading ? 'Disabling...' : isRegistering ? 'Enabling...' : token ? 'Disable' : 'Enable' }}
+          {{ state.isLoading ? 'Disabling...' : state.isRegistering ? 'Enabling...' : state.token ? 'Disable' : 'Enable'
+          }}
         </button>
       </div>
 
-      <div v-if="token && !isLoading && !isRegistering" class="space-y-4">
+      <div v-if="state.token && !state.isLoading && !state.isRegistering" class="space-y-4">
         <div class="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
           <div class="flex items-start">
             <div class="flex-shrink-0">
@@ -131,7 +128,7 @@ onMounted(() => {
         <div class="flex gap-2">
           <button @click="sendTestNotification"
             class="px-4 py-2 rounded-md bg-green-100 text-green-700 hover:bg-green-200 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800 transition-colors flex items-center gap-2"
-            :disabled="isLoading || isRegistering">
+            :disabled="state.isLoading || state.isRegistering">
             <BellIcon class="w-4 h-4" />
             Send Test Notification
           </button>
