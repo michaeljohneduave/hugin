@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useTrpc } from '@/lib/trpc';
+import { useTrpc } from '@/composables/useTrpc';
 import { useQuery } from '@tanstack/vue-query';
 import { onMounted, onUpdated, ref, toRef, watch } from 'vue';
 import { defineEmits, defineProps } from 'vue';

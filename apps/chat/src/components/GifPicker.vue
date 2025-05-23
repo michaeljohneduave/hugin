@@ -4,7 +4,7 @@ import { useQuery } from "@tanstack/vue-query";
 import { Search as SearchIcon } from "lucide-vue-next";
 import { funnel, } from "remeda"
 import { onMounted, ref, watch } from "vue";
-import { useTrpc } from "../lib/trpc";
+import { useTrpc } from "../composables/useTrpc";
 
 interface GifImage {
 	url: string;

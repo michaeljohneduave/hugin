@@ -3,8 +3,8 @@ import { getToken, onMessage } from "firebase/messaging";
 import { onMounted, reactive, ref } from "vue";
 import { onUnmounted, watch } from "vue";
 import { messaging } from "../lib/firebase";
-import { useTrpc } from "../lib/trpc";
 import { useNotification } from "./useNotification";
+import { useTrpc } from "./useTrpc";
 
 // Constants
 const TOKEN_STORAGE_KEY = "fcm_token";

@@ -4,10 +4,7 @@ export function useDeviceDetection() {
 	const isMobile = ref(false);
 
 	const checkDevice = () => {
-		// Check using a combination of screen width and touch capability
-		isMobile.value =
-			window.innerWidth <= 768 ||
-			("ontouchstart" in window && window.innerWidth < 1024);
+		isMobile.value = navigator.userAgent.includes("Mobile");
 	};
 
 	onMounted(() => {
