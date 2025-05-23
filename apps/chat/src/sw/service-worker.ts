@@ -128,7 +128,7 @@ function createNotificationOptions(payload: MessagePayload) {
 // Initialize Firebase
 function initializeFirebase(config: FirebaseOptions) {
 	if (isInitialized) {
-		console.log("[Firebase Messaging] Already initialized");
+		// console.log("[Firebase Messaging] Already initialized");
 		return;
 	}
 
@@ -136,13 +136,12 @@ function initializeFirebase(config: FirebaseOptions) {
 		const app = initializeApp(config);
 		messaging = getMessaging(app);
 		isInitialized = true;
-		console.log("[Firebase Messaging] Initialized successfully");
+		// console.log("[Firebase Messaging] Initialized successfully");
 
 		// // Set up background message handler once
 		// onBackgroundMessage(messaging, handleBackgroundMessage);
 	} catch (error) {
 		console.error("[Firebase Messaging] Initialization failed:", error);
-		throw error;
 	}
 }
 
@@ -205,11 +204,10 @@ self.addEventListener("message", (event) => {
 	console.log("[Service Worker] Message received:", event.data);
 	switch (event.data?.type) {
 		case "SKIP_WAITING":
-			console.log("[Service Worker] Skip waiting");
 			self.skipWaiting();
 			break;
 		case "FIREBASE_CONFIG": {
-			console.log("[Firebase Messaging] Received configuration");
+			console.log("[SW] Initializing Firebase");
 			initializeFirebase(JSON.parse(import.meta.env.VITE_FIREBASE_CONFIG));
 			break;
 		}
@@ -233,7 +231,7 @@ self.addEventListener("activate", (event) => {
 	);
 });
 
-self.addEventListener("push", (event) => {
+self.addEventListener("push", async (event) => {
 	console.log("[Service Worker] Push event received:", event);
 	if (event.data) {
 		const payload = event.data.json();
@@ -244,6 +242,15 @@ self.addEventListener("push", (event) => {
 		event.waitUntil(
 			self.registration.showNotification(notificationTitle, notificationOptions)
 		);
+
+		// Send the message payload to the client and store it
+		const clients = await self.clients.matchAll();
+		for (const client of clients) {
+			client.postMessage({
+				type: "FIREBASE_PUSH_MESSAGE",
+				payload: payload,
+			});
+		}
 	} else {
 		console.warn("[Service Worker] Push event has no data");
 	}
