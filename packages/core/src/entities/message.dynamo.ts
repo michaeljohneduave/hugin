@@ -75,6 +75,93 @@ export const MessageEntity = new Entity(
 				type: ["message", "joinRoom", "leaveRoom"] as const,
 				required: true,
 			},
+			roomType: {
+				type: ["group", "dm", "llm"] as const,
+				required: true,
+			},
+			llmChatOwnerId: {
+				type: "string",
+				required: false,
+			},
+			createdAt: {
+				type: "number",
+				default: () => Date.now(),
+				readOnly: true,
+			},
+			updatedAt: {
+				type: "number",
+				watch: "*",
+				default: () => Date.now(),
+				set: () => Date.now(),
+				readOnly: true,
+			},
+			deletedAt: {
+				type: "number",
+			},
+		},
+		indexes: {
+			primary: {
+				pk: {
+					field: "pk",
+					composite: ["messageId"],
+				},
+				sk: {
+					field: "sk",
+					composite: ["createdAt"],
+				},
+			},
+			byRoomAndThreadSortedByTime: {
+				index: "gsi1",
+				pk: {
+					field: "gsi1pk",
+					composite: ["roomId"],
+				},
+				sk: {
+					field: "gsi1sk",
+					composite: ["threadId", "createdAt"],
+				},
+			},
+			byUserAndRoomTypeSortedByTime: {
+				index: "gsi2",
+				pk: {
+					field: "gsi2pk",
+					composite: ["userId"],
+				},
+				sk: {
+					field: "gsi2sk",
+					composite: ["roomType", "createdAt"],
+				},
+			},
+			byLLMChatOwner: {
+				index: "gsi3",
+				pk: {
+					field: "gsi3pk",
+					composite: ["llmChatOwnerId"],
+				},
+				sk: {
+					field: "gsi3sk",
+					composite: ["createdAt"],
+				},
+			},
+		},
+	},
+	dynamoConfig
+);
+
+export type MessageEntityType = EntityItem<typeof MessageEntity>;
+
+export const MessageMetadataEntity = new Entity(
+	{
+		model: {
+			entity: "messageMetadata",
+			version: "1",
+			service: "hugin",
+		},
+		attributes: {
+			messageId: {
+				type: "string",
+				required: true,
+			},
 			metadata: {
 				type: "map",
 				properties: {
@@ -135,9 +222,6 @@ export const MessageEntity = new Entity(
 				set: () => Date.now(),
 				readOnly: true,
 			},
-			deletedAt: {
-				type: "number",
-			},
 		},
 		indexes: {
 			primary: {
@@ -147,47 +231,14 @@ export const MessageEntity = new Entity(
 				},
 				sk: {
 					field: "sk",
-					composite: ["createdAt"],
-				},
-			},
-			// byUser can enable a message keyword search functionality
-			byUser: {
-				collection: "rooms",
-				index: "gsi1",
-				pk: {
-					field: "gsi1pk",
-					composite: ["userId"],
-				},
-				sk: {
-					field: "gsi1sk",
-					composite: ["createdAt"],
-				},
-			},
-			byRoom: {
-				index: "gsi2",
-				pk: {
-					field: "gsi2pk",
-					composite: ["roomId"],
-				},
-				sk: {
-					field: "gsi2sk",
-					composite: ["createdAt"],
-				},
-			},
-			byThread: {
-				index: "gsi3",
-				pk: {
-					field: "gsi3pk",
-					composite: ["threadId"],
-				},
-				sk: {
-					field: "gsi3sk",
-					composite: ["createdAt"],
+					composite: [],
 				},
 			},
 		},
 	},
-	dynamoConfig,
+	dynamoConfig
 );
 
-export type MessageEntityType = EntityItem<typeof MessageEntity>;
+export type MessageMetadataEntityType = EntityItem<
+	typeof MessageMetadataEntity
+>;

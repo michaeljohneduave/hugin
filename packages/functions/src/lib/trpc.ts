@@ -1,3 +1,4 @@
+import type { CustomJwtPayload } from "@hugin-bot/core/src/types";
 import { TRPCError, initTRPC } from "@trpc/server";
 import type { CreateAWSLambdaContextOptions } from "@trpc/server/adapters/aws-lambda";
 import type { APIGatewayProxyEvent, APIGatewayProxyEventV2 } from "aws-lambda";
@@ -6,7 +7,7 @@ import { verifyToken } from "../util";
 export function createContext(
 	opts: CreateAWSLambdaContextOptions<
 		APIGatewayProxyEvent | APIGatewayProxyEventV2
-	>,
+	>
 ) {
 	return {
 		token: opts.event.headers.authorization?.split(" ")[1],
@@ -25,10 +26,16 @@ export const protectedProcedure = t.procedure.use(
 		}
 
 		try {
-			const verifiedToken = await verifyToken(opts.ctx.token);
+			const verifiedToken = (await verifyToken(
+				opts.ctx.token
+			)) as CustomJwtPayload;
+
 			return opts.next({
 				ctx: {
 					userId: verifiedToken.sub,
+					firstName: verifiedToken.firstName,
+					lastName: verifiedToken.lastName,
+					imageUrl: verifiedToken.imageUrl,
 				},
 			});
 		} catch (error) {
@@ -36,6 +43,6 @@ export const protectedProcedure = t.procedure.use(
 				code: "UNAUTHORIZED",
 			});
 		}
-	},
+	}
 );
 export const router = t.router;

@@ -50,7 +50,7 @@ export default $config({
 				],
 				purge: true,
 			},
-			indexPage: "/",
+			// indexPage: "/",
 			build: {
 				command: "npm run build",
 				output: "dist",

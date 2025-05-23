@@ -1,14 +1,24 @@
 <script setup lang="ts">
 import { useRegisterSW } from 'virtual:pwa-register/vue'
+import { useSession } from '@clerk/vue';
 import { funnel } from "remeda";
 import { onMounted, onUnmounted, ref, watch } from "vue";
 import NotificationContainer from "./components/NotificationContainer.vue";
 import { useNotification } from "./composables/useNotification";
+import { usePushNotification } from './composables/usePushNotification';
+import useSync from './composables/useSync';
+import { useWebsocket } from './composables/useWebsocket';
+import { db } from './lib/dexie';
 
 const visualViewport = window.visualViewport;
 let debouncedResize: ReturnType<typeof funnel>;
+const viewportHeight = window.innerHeight;
+
 const keyboardVisible = ref(false);
-const viewportHieght = window.innerHeight;
+const { initDataSync } = useSync();
+const { isSignedIn } = useSession();
+const { connect } = useWebsocket();
+const { state: pushNotificationState, enableNotifications } = usePushNotification();
 const notif = useNotification();
 const {
 	needRefresh,
@@ -27,7 +37,7 @@ function updateKeyboardStatus() {
 	if (visualViewport) {
 		const KEYBOARD_HEIGHT_THRESHOLD_PX = 150;
 		const isKeyboardCurrentlyVisible =
-			(viewportHieght - visualViewport.height) > KEYBOARD_HEIGHT_THRESHOLD_PX;
+			(viewportHeight - visualViewport.height) > KEYBOARD_HEIGHT_THRESHOLD_PX;
 		keyboardVisible.value = isKeyboardCurrentlyVisible;
 	} else {
 		keyboardVisible.value = false;
@@ -50,6 +60,20 @@ watch(needRefresh, (newVal) => {
 		});
 	}
 }, { immediate: true });
+
+watch(isSignedIn, (newVal) => {
+	if (newVal) {
+		connect();
+
+		if (!pushNotificationState.token) {
+			enableNotifications();
+		}
+
+		initDataSync();
+	} else {
+		db.delete();
+	}
+});
 
 onMounted(() => {
 	debouncedResize = funnel(

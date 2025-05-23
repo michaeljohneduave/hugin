@@ -1,3 +1,5 @@
+import ChatList from "@/pages/ChatList.vue";
+import NewChat from "@/pages/NewChat.vue";
 import { useSession } from "@clerk/vue";
 import { watch } from "vue";
 import {
@@ -13,15 +15,30 @@ const router = createRouter({
 	history: createWebHistory(),
 	routes: [
 		{
-			path: "/",
-			component: Chat,
-
-			meta: { requiresAuth: true },
-		},
-		{
+			name: "login",
 			path: "/login",
 			component: LoginPage,
 			meta: { requiresAuth: false },
+		},
+		{
+			name: "chat-list",
+			path: "/",
+			component: ChatList,
+			meta: { requiresAuth: true },
+		},
+		{
+			name: "new-chat",
+			path: "/chat/new",
+			component: NewChat,
+			meta: { requiresAuth: true },
+		},
+		{
+			name: "chat",
+			path: "/chat/:roomId",
+			component: Chat,
+			meta: {
+				requiresAuth: true,
+			},
 		},
 	],
 });
@@ -30,7 +47,7 @@ router.beforeEach(
 	async (
 		to: RouteLocationNormalized,
 		from: RouteLocationNormalized,
-		next: NavigationGuardNext,
+		next: NavigationGuardNext
 	) => {
 		const { isSignedIn, isLoaded } = useSession();
 
@@ -42,7 +59,7 @@ router.beforeEach(
 			// If trying to access login page while signed in, redirect to home
 			if (to.path === "/login" && isSignedIn.value) {
 				console.log(
-					"Router guard - redirecting to home (already authenticated)",
+					"Router guard - redirecting to home (already authenticated)"
 				);
 				next({ path: "/", replace: true });
 				return;
@@ -63,7 +80,7 @@ router.beforeEach(
 			// On error, redirect to login
 			next({ path: "/login", replace: true });
 		}
-	},
+	}
 );
 
 async function waitForClerkToLoad() {

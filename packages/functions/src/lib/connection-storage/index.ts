@@ -8,11 +8,11 @@ export interface ConnectionStorage {
 	refreshUserConnection(
 		userId: string,
 		token: string,
-		connectionId: string,
+		connectionId: string
 	): Promise<void>;
 	getUserConnections(userId: string): Promise<string[]>;
 	getConnectionData(
-		connectionId: string,
+		connectionId: string
 	): Promise<{ userId: string; token: string } | null>;
 	removeConnection(connectionId: string, userId: string): Promise<void>;
 
@@ -20,7 +20,7 @@ export interface ConnectionStorage {
 	// Add user to room refreshes the tokens to every room joined
 	addConnIdToRooms(roomIds: string[], connectionId: string): Promise<void>;
 	delConnIdFromRoom(roomId: string, connectionId: string): Promise<void>;
-	getRoomConnectionIds(roomId: string): Promise<string[]>;
+	getConnectionIdsByRoom(userId: string, roomId: string): Promise<string[]>;
 
 	// Logging operations - optional
 	enableVerboseLogging?(): void;
@@ -71,7 +71,7 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 	async refreshUserConnection(
 		userId: string,
 		token: string,
-		connectionId: string,
+		connectionId: string
 	): Promise<void> {
 		const start = process.hrtime.bigint();
 		await this.storage.refreshUserConnection(userId, token, connectionId);
@@ -92,7 +92,7 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 	}
 
 	async getConnectionData(
-		connectionId: string,
+		connectionId: string
 	): Promise<{ userId: string; token: string } | null> {
 		const start = process.hrtime.bigint();
 		const result = await this.storage.getConnectionData(connectionId);
@@ -114,7 +114,7 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 
 	async addConnIdToRooms(
 		roomIds: string[],
-		connectionId: string,
+		connectionId: string
 	): Promise<void> {
 		const start = process.hrtime.bigint();
 		await this.storage.addConnIdToRooms(roomIds, connectionId);
@@ -133,12 +133,17 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 		}
 	}
 
-	async getRoomConnectionIds(roomId: string): Promise<string[]> {
+	async getConnectionIdsByRoom(
+		userId: string,
+		roomId: string
+	): Promise<string[]> {
 		const start = process.hrtime.bigint();
-		const result = await this.storage.getRoomConnectionIds(roomId);
+		const result = await this.storage.getConnectionIdsByRoom(userId, roomId);
 		const end = process.hrtime.bigint();
 		if (this.verboseLogging) {
-			console.log(`getRoomMembers took ${(end - start) / 1_000_000n}ms`);
+			console.log(
+				`getConnectionIdsByRoom took ${(end - start) / 1_000_000n}ms`
+			);
 		}
 		return result;
 	}
@@ -146,7 +151,7 @@ export class MeasuredConnectionStorage implements ConnectionStorage {
 
 export function createConnectionStorage(
 	type: StorageType,
-	redis?: Valkey,
+	redis?: Valkey
 ): ConnectionStorage {
 	let storage: ConnectionStorage;
 

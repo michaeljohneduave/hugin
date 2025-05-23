@@ -54,8 +54,7 @@ export const WsConnectionEntity = new Entity(
 					composite: ["connectionId"],
 				},
 			},
-
-			byConnectionId: {
+			byConnection: {
 				index: "gsi1",
 				pk: {
 					field: "gsi1pk",
@@ -68,7 +67,7 @@ export const WsConnectionEntity = new Entity(
 			},
 		},
 	},
-	dynamoConfig,
+	dynamoConfig
 );
 
 // This manages the rooms of a user via their connectionIds (multi devices, multi browser)
@@ -103,7 +102,7 @@ export const WsRoomsEntity = new Entity(
 					composite: ["connectionId"],
 				},
 			},
-			byConnectionId: {
+			byConnection: {
 				index: "gsi1",
 				pk: {
 					field: "gsi1pk",
@@ -116,5 +115,5 @@ export const WsRoomsEntity = new Entity(
 			},
 		},
 	},
-	dynamoConfig,
+	dynamoConfig
 );

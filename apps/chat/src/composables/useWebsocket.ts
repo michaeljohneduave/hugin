@@ -1,12 +1,11 @@
 import { WebSocketManager } from "@/lib/wsClient";
-import { useAuth, useSession } from "@clerk/vue";
+import { useAuth, useSession, useUser } from "@clerk/vue";
 import type { ChatPayload } from "@hugin-bot/core/src/types";
 
 export function useWebsocket() {
 	const ws = WebSocketManager.getInstance();
 	const { session } = useSession();
 	const { getToken } = useAuth();
-
 	const connect = async () => {
 		const token = await getToken.value();
 		if (token) {
@@ -18,19 +17,20 @@ export function useWebsocket() {
 		if (!session.value?.user) {
 			return;
 		}
+	};
 
-		// ws.sendMessage({
-		// 	action: "joinRoom",
-		// 	roomId,
-		// 	createdAt: Date.now(),
-		// 	senderId: session.value?.user.id,
-		// 	type: "event",
-		// 	messageId: crypto.randomUUID(),
-		// 	userId: session.value?.user.id,
-		// });
+	const forceReconnect = async () => {
+		const token = await getToken.value();
+		if (token) {
+			ws.connect(token);
+		}
 	};
 
 	const sendMessage = (message: ChatPayload) => {
+		if (!ws.isConnected.value) {
+			forceReconnect();
+		}
+
 		ws.sendMessage(message);
 	};
 
@@ -43,7 +43,7 @@ export function useWebsocket() {
 	};
 
 	return {
-		isOnline: ws.isConnected(),
+		isOnline: ws.isConnected,
 		joinRoom,
 		connect,
 		sendMessage,

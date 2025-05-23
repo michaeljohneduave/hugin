@@ -10,6 +10,8 @@ import { GENERAL_ROOM } from "@hugin-bot/core/src/config";
 import {
 	MessageEntity,
 	type MessageEntityType,
+	MessageMetadataEntity,
+	type MessageMetadataEntityType,
 } from "@hugin-bot/core/src/entities/message.dynamo";
 import { RoomEntity } from "@hugin-bot/core/src/entities/room.dynamo";
 import type {
@@ -59,6 +61,7 @@ export const connect = async (event: APIGatewayProxyEvent) => {
 			.byUser({
 				userId: verifiedToken.sub,
 			})
+			.where((attr, op) => op.eq(attr.type, "group"))
 			.go({
 				pages: "all",
 			});
@@ -174,6 +177,7 @@ export const $default = async (event: APIGatewayProxyEvent) => {
 							avatar: jwtPayload.imageUrl,
 						},
 						status: "active",
+						type: "group",
 					}).go({
 						response: "none",
 					}),
@@ -267,7 +271,7 @@ async function multiSendMsg(
 }
 
 // TODO: Add llm errors as a message entity
-async function generateLLMResponse({
+export async function generateLLMResponse({
 	message,
 	connectionIds,
 	agentId,
@@ -295,6 +299,7 @@ async function generateLLMResponse({
 
 	const { response, error } = await router({
 		threadId: message.threadId,
+		roomId: message.roomId,
 		context: {
 			userId: user.id,
 			userName: user.name,
@@ -306,9 +311,11 @@ async function generateLLMResponse({
 				message: msg,
 				action: "message",
 				type: "llm",
+				roomType: message.roomType,
 				replyToMessageId: message.messageId,
 				threadId: message.threadId,
 				mentions: [agentId],
+				llmChatOwnerId: message.llmChatOwnerId,
 			}).go();
 
 			multiSendMsg(record.data, connectionIds);
@@ -324,7 +331,7 @@ async function generateLLMResponse({
 		}));
 
 	let text = "";
-	let metadata: MessageEntityType["metadata"];
+	let metadata: MessageMetadataEntityType["metadata"];
 	// TODOS: Implement retry and send message + context into queue
 	if (error) {
 		console.error("Error generating LLM response", error);
@@ -358,13 +365,21 @@ async function generateLLMResponse({
 		message: text,
 		roomId: message.roomId,
 		type: "llm",
+		roomType: message.roomType,
 		replyToMessageId: message.messageId,
 		threadId: message.threadId,
-		mentions: [agentId],
+		mentions: [user.id],
+		llmChatOwnerId: message.llmChatOwnerId,
+		// createdAt: Date.now(),
+		// updatedAt: Date.now(),
+	}).go();
+
+	MessageMetadataEntity.create({
+		messageId: llmMessage.data.messageId,
 		metadata,
 	}).go();
 
-	await multiSendMsg(omit(llmMessage.data, ["metadata"]), connectionIds);
+	await multiSendMsg(llmMessage.data, connectionIds);
 }
 
 export const sendMessage = async (
@@ -373,15 +388,25 @@ export const sendMessage = async (
 ) => {
 	const connectionData =
 		await connectionStorage.getConnectionData(connectionId);
+
 	if (!connectionData) {
 		throw new Error("Connection data not found");
 	}
 
 	const jwtPayload = decodeJwt(connectionData.token)
 		.payload as CustomJwtPayload;
-	const connectionIds = await connectionStorage.getRoomConnectionIds(
+	const connectionIds = await connectionStorage.getConnectionIdsByRoom(
+		jwtPayload.sub,
 		payload.roomId
 	);
+	const room = await RoomEntity.get({
+		roomId: payload.roomId,
+		userId: jwtPayload.sub,
+	}).go();
+
+	if (!room.data) {
+		throw new Error("Room not found");
+	}
 
 	console.log(
 		"Room members",
@@ -392,13 +417,22 @@ export const sendMessage = async (
 	);
 
 	payload.action = "message";
+	payload.roomId = room.data.roomId;
+	payload.roomType = room.data.type;
+	payload.llmChatOwnerId = room.data.userId;
 	payload.threadId = payload.threadId || crypto.randomUUID();
-	payload.messageId = crypto.randomUUID();
 
-	// Note: For now we are waiting for the message to be created before sending it to the client
-	// This might be slower than sending the message immediately
-	// TODO: Measure the performance of this
-	await MessageEntity.create({
+	// Respect the timestamps from the client only if difference isn't >10s
+	if (payload.createdAt && payload.updatedAt) {
+		const createdAt = new Date(payload.createdAt);
+		const timeDiff = Math.abs(Date.now() - createdAt.getTime());
+		if (timeDiff > 10000) {
+			payload.createdAt = Date.now();
+			payload.updatedAt = Date.now();
+		}
+	}
+
+	const message = await MessageEntity.create({
 		messageId: payload.messageId,
 		userId: payload.userId,
 		message: payload.message,
@@ -406,15 +440,19 @@ export const sendMessage = async (
 		audioFiles: payload.audioFiles,
 		videoFiles: payload.videoFiles,
 		roomId: payload.roomId,
+		roomType: payload.roomType,
 		type: "user" as const,
 		action: payload.action,
 		replyToMessageId: payload.replyToMessageId,
 		mentions: payload.mentions,
 		// For now, we trust the frontend to send the correct threadId/replyToMessageId
 		threadId: payload.threadId,
+		llmChatOwnerId: payload.llmChatOwnerId,
+		createdAt: payload.createdAt,
+		updatedAt: payload.updatedAt,
 	}).go();
 
-	multiSendMsg(payload, connectionIds);
+	await multiSendMsg(message.data, connectionIds);
 
 	let agentId = payload.mentions?.[0];
 
@@ -440,6 +478,21 @@ export const sendMessage = async (
 				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
 			},
 		});
+	} else if (payload.roomType === "llm") {
+		if (!room.data.agentId) {
+			console.error("Room has no agentId", room.data);
+			return;
+		}
+
+		await generateLLMResponse({
+			message: payload,
+			agentId: room.data.agentId,
+			connectionIds,
+			user: {
+				id: `${jwtPayload.sub}`,
+				name: `${jwtPayload.firstName} ${jwtPayload.lastName}`,
+			},
+		});
 	}
 };
 
@@ -454,13 +507,10 @@ export const disconnect = async (event: APIGatewayProxyEvent) => {
 			};
 		}
 
-		const connectionData =
-			await connectionStorage.getConnectionData(connectionId);
-		if (connectionData) {
-			await connectionStorage.removeConnection(
-				connectionId,
-				connectionData.userId
-			);
+		const jwtPayload = decodeJwt(token).payload as CustomJwtPayload;
+
+		if (connectionId) {
+			await connectionStorage.removeConnection(connectionId, jwtPayload.sub);
 		}
 
 		return {

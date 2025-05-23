@@ -1,9 +1,11 @@
+import { clerkPublicKey } from "./config";
 import { MessageTable, Postgres } from "./database";
 import { domain } from "./dns";
 import { puppeteerFn } from "./puppeteer";
 import {
 	BRAVE_API_KEY,
 	CLERK_SECRET_KEY,
+	CLERK_WEBHOOK_SECRET,
 	FIREBASE_CLIENT_EMAIL,
 	FIREBASE_PRIVATE_KEY,
 	FIREBASE_PROJECT_ID,
@@ -12,6 +14,16 @@ import {
 	POSTGRES_CONN_URI,
 	VAPID_PRIVATE_KEY,
 } from "./secrets";
+
+export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
+	domain:
+		$app.stage === "prod"
+			? {
+					name: `hugin-ws.${domain}`,
+					dns: sst.cloudflare.dns({}),
+				}
+			: null,
+});
 
 export const api = new sst.aws.ApiGatewayV2("Api", {
 	domain:
@@ -37,10 +49,14 @@ export const api = new sst.aws.ApiGatewayV2("Api", {
 api.route("GET /trpc/{proxy+}", {
 	transform: {
 		function: {
-			memorySize: 256,
+			memorySize: 1024,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
+	timeout: "300 seconds",
 	handler: "packages/functions/src/trpc.api.handler",
 	link: [
 		MessageTable,
@@ -50,16 +66,25 @@ api.route("GET /trpc/{proxy+}", {
 		FIREBASE_CLIENT_EMAIL,
 		FIREBASE_PROJECT_ID,
 		FIREBASE_PRIVATE_KEY,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		POSTGRES_CONN_URI,
+		websocketApi,
+		puppeteerFn,
+		clerkPublicKey,
 	],
 });
 
 api.route("POST /trpc/{proxy+}", {
 	transform: {
 		function: {
-			memorySize: 256,
+			memorySize: 1024,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
+	timeout: "300 seconds",
 	handler: "packages/functions/src/trpc.api.handler",
 	link: [
 		MessageTable,
@@ -69,7 +94,24 @@ api.route("POST /trpc/{proxy+}", {
 		FIREBASE_CLIENT_EMAIL,
 		FIREBASE_PROJECT_ID,
 		FIREBASE_PRIVATE_KEY,
+		GOOGLE_GENERATIVE_AI_API_KEY,
+		POSTGRES_CONN_URI,
+		websocketApi,
+		puppeteerFn,
+		clerkPublicKey,
 	],
+});
+
+api.route("POST /webhooks/clerk", {
+	handler: "packages/functions/src/webhooks.clerk",
+	link: [CLERK_WEBHOOK_SECRET, MessageTable],
+	transform: {
+		function: {
+			tracingConfig: {
+				mode: "Active",
+			},
+		},
+	},
 });
 
 export const scraperFn = new sst.aws.Function("ScraperFn", {
@@ -84,18 +126,11 @@ export const scraperFn = new sst.aws.Function("ScraperFn", {
 		function: {
 			memorySize: 256,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
-});
-
-export const websocketApi = new sst.aws.ApiGatewayWebSocket("WebsocketApi", {
-	domain:
-		$app.stage === "prod"
-			? {
-					name: `hugin-ws.${domain}`,
-					dns: sst.cloudflare.dns({}),
-				}
-			: null,
 });
 
 const wsFnLinks = [
@@ -105,6 +140,7 @@ const wsFnLinks = [
 	websocketApi,
 	MessageTable,
 	CLERK_SECRET_KEY,
+	clerkPublicKey,
 	puppeteerFn,
 	BRAVE_API_KEY,
 ];
@@ -116,6 +152,9 @@ websocketApi.route("$connect", {
 		function: {
 			memorySize: 256,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
 });
@@ -127,6 +166,9 @@ websocketApi.route("$disconnect", {
 		function: {
 			memorySize: 128,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
 });
@@ -138,6 +180,9 @@ websocketApi.route("$default", {
 		function: {
 			memorySize: 256,
 			architectures: ["arm64"],
+			tracingConfig: {
+				mode: "Active",
+			},
 		},
 	},
 	// TODOS: This is temp, we will decouple the ws message handler for agent requests
@@ -155,6 +200,13 @@ websocketApi.route("$default", {
 export const agentResponseFn = new sst.aws.Function("AgentResponseFn", {
 	handler: "packages/functions/src/websocket.agentResponse",
 	link: [MessageTable, websocketApi],
+	transform: {
+		function: {
+			tracingConfig: {
+				mode: "Active",
+			},
+		},
+	},
 	permissions: [
 		{
 			actions: ["execute-api:ManageConnections"],

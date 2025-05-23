@@ -4,7 +4,7 @@ import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
 import { useDeviceDetection } from '@/composables/useDeviceDetection';
 import type { Bot } from '@/pages/Chat.vue';
-import type { ChatPayload, User } from '@hugin-bot/core/src/types';
+import type { ChatPayload, Room, User } from '@hugin-bot/core/src/types';
 import {
   File as FileIcon,
   Search as SearchIcon,
@@ -15,11 +15,12 @@ import FilePreview from './FilePreview.vue';
 import GifPicker from './GifPicker.vue';
 
 const props = defineProps<{
-  currentUser: User | null;
-  currentChatId: string;
+  currentUser?: User;
+  currentChatId?: string;
   availableBots: Bot[];
   isDarkMode: boolean;
   replyTo?: ChatPayload | null;
+  roomType: Room["type"]
 }>();
 
 const emit = defineEmits<{
@@ -49,6 +50,10 @@ const selectedBotIndex = ref(-1); // Track currently selected bot in the dropdow
 
 // Get mobile detection from the composable
 const { isMobile } = useDeviceDetection();
+
+const notLlmRoom = computed(() => {
+  return props.roomType !== 'llm';
+});
 
 // Auto-resize textarea
 const autoResize = () => {
@@ -138,7 +143,7 @@ const insertEmoji = (emoji: EmojiData) => {
 
 // Update the insertGif function
 const selectAndSendGif = (url: string) => {
-  if (!props.currentUser) return;
+  if (!props.currentUser || !props.currentChatId) return;
 
   const message: ChatPayload = {
     messageId: crypto.randomUUID(),
@@ -146,9 +151,11 @@ const selectAndSendGif = (url: string) => {
     userId: props.currentUser.id,
     user: props.currentUser,
     roomId: props.currentChatId,
-    createdAt: Date.now(),
     imageFiles: [url],
     type: "user",
+    roomType: props.roomType,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
 
   showGifPicker.value = false;
@@ -175,30 +182,32 @@ const handleInput = (event: Event) => {
   // Naive and temp implementation of tagging
   // will rework this in the future with better handling of bot and user tags
   // Currently, it only handles tags on end of the message
-  if (lastChar === '@') {
-    showBotSuggestions.value = true;
-    filteredBots.value = props.availableBots;
-    selectedBotIndex.value = 0;
-  } else if (lastWord) {
-    if (lastWord.startsWith("@")) {
-      lastWord = lastWord.replace("@", "")
-    }
-
-    const filtered = props.availableBots.filter(bot => {
-      return bot.name.toLowerCase().startsWith(lastWord);
-    })
-
-    if (filtered.length) {
-      filteredBots.value = filtered;
+  if (notLlmRoom.value) {
+    if (lastChar === '@') {
       showBotSuggestions.value = true;
+      filteredBots.value = props.availableBots;
       selectedBotIndex.value = 0;
+    } else if (lastWord) {
+      if (lastWord.startsWith("@")) {
+        lastWord = lastWord.replace("@", "")
+      }
+
+      const filtered = props.availableBots.filter(bot => {
+        return bot.name.toLowerCase().startsWith(lastWord);
+      })
+
+      if (filtered.length) {
+        filteredBots.value = filtered;
+        showBotSuggestions.value = true;
+        selectedBotIndex.value = 0;
+      } else {
+        selectedBotIndex.value = -1;
+        showBotSuggestions.value = false;
+        filteredBots.value = [];
+      }
     } else {
-      selectedBotIndex.value = -1;
       showBotSuggestions.value = false;
-      filteredBots.value = [];
     }
-  } else {
-    showBotSuggestions.value = false;
   }
 
   autoResize();
@@ -290,7 +299,18 @@ const hidePickers = () => {
 
 // Send message
 const sendMessage = () => {
-  if ((!messageInput.value.trim() && !selectedFile.value && !selectedVideoFile.value && !selectedAudioFile.value && !audioRecording.value) || !props.currentUser) return;
+  if (
+    (
+      !messageInput.value.trim() &&
+      !selectedFile.value &&
+      !selectedVideoFile.value &&
+      !selectedAudioFile.value &&
+      !audioRecording.value
+    ) ||
+    !props.currentUser ||
+    !props.currentChatId) {
+    return;
+  }
 
   // Convert files to URLs (this should be handled by your file upload service)
   const imageFiles = selectedFile.value ? [URL.createObjectURL(selectedFile.value)] : [];
@@ -304,7 +324,6 @@ const sendMessage = () => {
     action: "message",
     userId: props.currentUser.id,
     roomId: props.currentChatId,
-    createdAt: Date.now(),
     type: "user",
     ...(imageFiles.length > 0 || videoFiles.length > 0 || audioFiles.length > 0
       ? {
@@ -314,9 +333,12 @@ const sendMessage = () => {
       }
       : {
         message: messageInput.value,
-        taggedBotId: taggedBot.value?.id
+        // taggedBotId: taggedBot.value?.id
       }),
-    user: props.currentUser
+    user: props.currentUser,
+    roomType: props.roomType,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
   };
 
   if (taggedBot.value && message.message?.includes(taggedBot.value.name)) {
@@ -417,7 +439,7 @@ onUnmounted(() => {
             @input="handleInput" @keydown="handleKeydown" ref="textareaRef" @focus="hidePickers"></textarea>
 
           <!-- Bot suggestions dropdown -->
-          <div v-if="showBotSuggestions"
+          <div v-if="showBotSuggestions && notLlmRoom"
             class="absolute bottom-full left-0 mb-1 w-64 bg-white dark:bg-gray-800 rounded-lg shadow-lg border dark:border-gray-700 max-h-48 overflow-y-auto">
             <div v-for="(bot, index) in filteredBots" :key="bot.id" @click="selectBot(bot)"
               class="flex items-center px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer"

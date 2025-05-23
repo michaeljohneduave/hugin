@@ -1,5 +1,6 @@
 import type { ChatPayload, PingPayload } from "@hugin-bot/core/src/types";
 import { type Ref, ref } from "vue";
+import { addMessageToDb, db } from "./dexie";
 
 export interface WebSocketClient {
 	connect(token: string): void;
@@ -9,7 +10,7 @@ export interface WebSocketClient {
 	removeMessageHandler(handler: (event: MessageEvent) => void): void;
 	onConnected(callback: () => void): void;
 	removeConnectionCallback(callback: () => void): void;
-	isConnected(): Ref<boolean>;
+	get isConnected(): Ref<boolean>;
 }
 
 export class WebSocketManager implements WebSocketClient {
@@ -31,6 +32,11 @@ export class WebSocketManager implements WebSocketClient {
 	private readonly BASE_RECONNECT_DELAY = 1000; // 1 second
 	private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
 	private isReconnecting = false; // Flag to prevent multiple concurrent reconnect loops
+
+	// Visibility settings
+	private readonly VISIBILITY_DISCONNECT_DELAY = 10 * 60 * 1000; // 10 minutes
+	private visibilityDisconnectTimeoutId: ReturnType<typeof setTimeout> | null =
+		null;
 
 	// Vue reactive state
 	private isOnline = ref(false);
@@ -75,8 +81,14 @@ export class WebSocketManager implements WebSocketClient {
 	private handleVisibilityChange = () => {
 		console.log(`Document visibility changed to: ${document.visibilityState}`);
 		if (document.visibilityState === "visible") {
-			// Add a small delay when becoming visible
+			this.clearVisibilityDisconnectTimer();
+			// Add a small delay when becoming visible to stabilize
 			setTimeout(() => this.checkAndReconnectIfNeeded("visibilitychange"), 100);
+		} else if (document.visibilityState === "hidden") {
+			// Only start the timer if connected and not already trying to reconnect
+			if (this.isOnline.value && !this.isReconnecting) {
+				this.startVisibilityDisconnectTimer();
+			}
 		}
 		// No action needed when hidden, rely on ping/pong or OS disconnect
 	};
@@ -118,6 +130,7 @@ export class WebSocketManager implements WebSocketClient {
 	 */
 	public disconnect(isUnloading = false): void {
 		console.log("WebSocket disconnect: Closing connection intentionally.");
+		this.clearVisibilityDisconnectTimer(); // Clear visibility timer on any disconnect
 		this.resetReconnectionState(); // Stop any scheduled reconnections
 		if (this.ws) {
 			// Remove listeners before closing to prevent onclose handler
@@ -135,11 +148,13 @@ export class WebSocketManager implements WebSocketClient {
 	}
 
 	public sendMessage(message: ChatPayload): void {
+		message.status = "unsent";
+		addMessageToDb(message);
+
+		// We could just call the send without conditionals
+		// but when ws === connecting or closed, unneeded errors will be thrown
 		if (this.ws?.readyState === WebSocket.OPEN) {
 			this.ws.send(JSON.stringify(message));
-		} else {
-			console.warn("WebSocket sendMessage: Connection not open.");
-			// TODO: Queue message or throw error?
 		}
 	}
 
@@ -161,11 +176,11 @@ export class WebSocketManager implements WebSocketClient {
 
 	public removeConnectionCallback(callback: () => void): void {
 		this.connectionCallbacks = this.connectionCallbacks.filter(
-			(c) => c !== callback,
+			(c) => c !== callback
 		);
 	}
 
-	public isConnected(): Ref<boolean> {
+	get isConnected(): Ref<boolean> {
 		return this.isOnline;
 	}
 
@@ -177,7 +192,7 @@ export class WebSocketManager implements WebSocketClient {
 	 */
 	private async checkAndReconnectIfNeeded(trigger: string): Promise<void> {
 		console.log(
-			`Checking connection status (triggered by ${trigger}): isOnline=${this.isOnline.value}, wsState=${this.ws?.readyState}, isReconnecting=${this.isReconnecting}`,
+			`Checking connection status (triggered by ${trigger}): isOnline=${this.isOnline.value}, wsState=${this.ws?.readyState}, isReconnecting=${this.isReconnecting}`
 		);
 
 		// Don't attempt if already connected, connecting, or in a backoff loop
@@ -188,7 +203,7 @@ export class WebSocketManager implements WebSocketClient {
 			this.isReconnecting // Respect the backoff timer if it's running
 		) {
 			console.log(
-				"Check skipped: Connection is active or reconnection attempt already in progress.",
+				"Check skipped: Connection is active or reconnection attempt already in progress."
 			);
 			return;
 		}
@@ -204,14 +219,14 @@ export class WebSocketManager implements WebSocketClient {
 				this.connectInternal(token);
 			} else {
 				console.error(
-					"Failed to get token for reconnection (checkAndReconnectIfNeeded).",
+					"Failed to get token for reconnection (checkAndReconnectIfNeeded)."
 				);
 				this.isReconnecting = false; // Reset flag if token fails
 			}
 		} catch (error) {
 			console.error(
 				"Error getting token for reconnection (checkAndReconnectIfNeeded):",
-				error,
+				error
 			);
 			this.isReconnecting = false; // Reset flag on error
 		}
@@ -226,7 +241,7 @@ export class WebSocketManager implements WebSocketClient {
 		// 1. Clean up any existing socket and its timers/listeners
 		if (this.ws) {
 			console.log(
-				"Cleaning up previous WebSocket instance before reconnecting.",
+				"Cleaning up previous WebSocket instance before reconnecting."
 			);
 			// Remove listeners to prevent them firing on the old instance
 			this.ws.onopen = null;
@@ -248,13 +263,22 @@ export class WebSocketManager implements WebSocketClient {
 		this.isOnline.value = false; // Explicitly set to false until onopen
 
 		// 3. Assign event handlers to the new instance
-		this.ws.onopen = () => {
-			console.log("WebSocket connection established.");
+		this.ws.onopen = (evt) => {
+			console.log("WebSocket connection established.", evt);
 			this.isOnline.value = true;
 			this.isReconnecting = false; // Successfully connected, no longer "reconnecting"
 			this.reconnectAttempts = 0; // Reset counter on successful connection
 			this.lastPongTime = Date.now();
 			this.startPingPongChecks(); // Start keep-alive for the new connection
+			this.sendUnsentMessages();
+
+			// Clear any pending visibility disconnect timer that might have been set
+			// if the tab was hidden before this connection attempt started.
+			this.clearVisibilityDisconnectTimer();
+			// If the tab is currently hidden (e.g., connected in background), start the timer.
+			if (document.visibilityState === "hidden") {
+				this.startVisibilityDisconnectTimer();
+			}
 
 			// Notify listeners
 			for (const callback of this.connectionCallbacks) {
@@ -300,7 +324,7 @@ export class WebSocketManager implements WebSocketClient {
 
 		this.ws.onclose = (event) => {
 			console.log(
-				`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason || "N/A"}, Clean: ${event.wasClean}`,
+				`WebSocket connection closed. Code: ${event.code}, Reason: ${event.reason || "N/A"}, Clean: ${event.wasClean}`
 			);
 			this.isOnline.value = false;
 			this.cleanupTimers(); // Stop ping/pong on close
@@ -310,15 +334,14 @@ export class WebSocketManager implements WebSocketClient {
 			// Code 1005 is "No Status Received" - often happens on abnormal closures
 			// Code 1006 is "Abnormal Closure" - also common for network issues
 			// Avoid reconnecting if it was a clean, intentional close (code 1000)
-			// or if we are already in a reconnection backoff loop.
-			if (event.code !== 1000 && !this.ws?.CONNECTING) {
+			if (event.code !== 1000) {
 				console.log(
-					"Unexpected closure detected, initiating reconnect sequence.",
+					"Unexpected closure detected, initiating reconnect sequence."
 				);
 				this.handleReconnect();
 			} else {
 				console.log(
-					`Skipping reconnect sequence (Code: ${event.code}, isReconnecting: ${this.ws?.readyState === WebSocket.CONNECTING})`,
+					`Skipping reconnect sequence (Code: ${event.code}, isReconnecting: ${this.ws?.readyState === WebSocket.CONNECTING})`
 				);
 				// Ensure flag is false if we are not starting a reconnect sequence
 				this.isReconnecting = false;
@@ -345,7 +368,7 @@ export class WebSocketManager implements WebSocketClient {
 		this.reconnectAttempts++;
 
 		console.log(
-			`Scheduling reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms`,
+			`Scheduling reconnect attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS} in ${delay}ms`
 		);
 
 		// Clear previous timeout just in case (shouldn't be necessary but safe)
@@ -403,12 +426,16 @@ export class WebSocketManager implements WebSocketClient {
 			const pongTimeoutThreshold = this.PING_INTERVAL * 2.5;
 			if (now - this.lastPongTime > pongTimeoutThreshold) {
 				console.warn(
-					`No pong received in ${pongTimeoutThreshold}ms. Disconnecting.`,
+					`No pong received in ${pongTimeoutThreshold}ms. Disconnecting.`
 				);
 				// Treat lack of pong as a connection failure
 				if (this.ws?.readyState === WebSocket.OPEN) {
 					// Close will trigger onclose, which should handle reconnect logic
-					this.ws.close(1000, "Ping timeout");
+					// Use code 1001 (Going Away) to indicate client-side termination due to unresponsiveness,
+					// which is not a "normal" closure (1000) and should trigger reconnection.
+					// This should be 1001 but apparently the throws ws instance throws an error
+					// Used 4200 for custom code and reason
+					this.ws.close(4200, "Ping timeout");
 				}
 				this.cleanupTimers(); // Stop checks immediately
 			}
@@ -452,6 +479,8 @@ export class WebSocketManager implements WebSocketClient {
 			clearTimeout(this.reconnectTimeout);
 			this.reconnectTimeout = null;
 		}
+		// Also clear visibility timer here if it exists, as part of general timer cleanup
+		this.clearVisibilityDisconnectTimer();
 	}
 
 	/**
@@ -465,5 +494,46 @@ export class WebSocketManager implements WebSocketClient {
 		}
 		this.reconnectAttempts = 0;
 		this.isReconnecting = false;
+	}
+
+	// --- Visibility Timers ---
+	private startVisibilityDisconnectTimer(): void {
+		this.clearVisibilityDisconnectTimer(); // Ensure no duplicate timers
+		console.log(
+			`Starting visibility disconnect timer for ${this.VISIBILITY_DISCONNECT_DELAY / (60 * 1000)} minutes. Time: ${new Date().toISOString()}`
+		);
+		this.visibilityDisconnectTimeoutId = setTimeout(() => {
+			if (
+				document.visibilityState === "hidden" &&
+				this.isOnline.value &&
+				!this.isReconnecting
+			) {
+				console.log(
+					`Auto-disconnecting WebSocket due to tab inactivity for ${this.VISIBILITY_DISCONNECT_DELAY / (60 * 1000)} minutes.`
+				);
+				this.disconnect(); // Standard disconnect
+			}
+		}, this.VISIBILITY_DISCONNECT_DELAY);
+	}
+
+	private clearVisibilityDisconnectTimer(): void {
+		if (this.visibilityDisconnectTimeoutId) {
+			clearTimeout(this.visibilityDisconnectTimeoutId);
+			this.visibilityDisconnectTimeoutId = null;
+			console.log("Cleared visibility disconnect timer.");
+		}
+	}
+
+	private async sendUnsentMessages() {
+		const messages = await db.messages
+			.where("status")
+			.equals("unsent")
+			.sortBy("createdAt");
+
+		for (const message of messages) {
+			if (this.ws?.readyState === WebSocket.OPEN) {
+				this.ws.send(JSON.stringify(message));
+			}
+		}
 	}
 }

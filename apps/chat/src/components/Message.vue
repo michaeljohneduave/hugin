@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { useDeviceDetection } from '@/composables/useDeviceDetection';
 import type { Bot } from "@/pages/Chat.vue";
-import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
+import type { ChatPayload, Room, RoomPayload, User } from "@hugin-bot/core/src/types";
 import DOMPurify from 'isomorphic-dompurify';
 import { marked } from 'marked';
 import Prism from "prismjs"
-import { computed, onMounted, onUnmounted, ref } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import MessageMetadataDialog from './MessageMetadataDialog.vue';
 
+import { formatRelativeTime } from '@/lib/utils';
 import '@/lib/prism';
 
 type MessagePart = {
@@ -21,7 +22,8 @@ const props = defineProps<{
   index: number;
   currentUser: User;
   messages: Array<ChatPayload | RoomPayload>;
-  availableBots: Bot[]
+  availableBots: Bot[];
+  roomType: Room["type"];
 }>();
 
 // Add touch handling state
@@ -46,54 +48,32 @@ const slideThreshold = 80; // pixels needed to trigger reply
 const isHovered = ref(false);
 const isMessageCodeBlock = ref(false);
 const showMobileActions = ref(false);
+const showSendingIndicator = ref(false);
+let sendingTimer: ReturnType<typeof setTimeout> | null = null;
 
 const emit = defineEmits<{
   replyToMessage: [message: ChatPayload];
 }>();
 
-// Format relative time
-const formatRelativeTime = (timestamp: number) => {
-  const now = new Date();
-  const date = new Date(timestamp);
-  const diff = now.getTime() - timestamp;
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-  // Within the same day, show time only
-  if (days === 0) {
-    return date.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    }).toLowerCase();
+// Watch for message status changes to show/hide sending indicator
+watch(() => props.message.status, (newStatus, oldStatus) => {
+  if (newStatus === 'unsent') {
+    if (sendingTimer) clearTimeout(sendingTimer);
+    sendingTimer = setTimeout(() => {
+      if (props.message.status === 'unsent') {
+        showSendingIndicator.value = true;
+      }
+    }, 2000);
+  } else {
+    if (sendingTimer) clearTimeout(sendingTimer);
+    showSendingIndicator.value = false;
   }
+}, { immediate: true });
 
-  // Yesterday or older, show day and time
-  if (days === 1) {
-    return `Yesterday ${date.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    }).toLowerCase()}`;
-  }
-
-  if (days <= 7) {
-    return `${date.toLocaleDateString([], { weekday: 'short' })} ${date.toLocaleTimeString([], {
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    }).toLowerCase()}`;
-  }
-
-  // Older than a week, show full date and time
-  return `${date.toLocaleDateString([], {
-    month: 'short',
-    day: 'numeric'
-  })} ${date.toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-    hour12: true
-  }).toLowerCase()}`;
-};
+// Add computed property to determine if touch events should be enabled
+const llmRoom = computed(() => {
+  return props.roomType === 'llm';
+});
 
 // Function to parse code blocks in text
 const parseCodeBlocks = (text: string): MessagePart[] => {
@@ -184,6 +164,7 @@ const handleReply = () => {
 
 // Touch event handlers
 const handleTouchStart = (event: TouchEvent) => {
+  if (llmRoom.value) return;
   touchStartX.value = event.touches[0].clientX;
   touchStartY.value = event.touches[0].clientY;
   isSliding.value = true;
@@ -202,7 +183,7 @@ const handleTouchStart = (event: TouchEvent) => {
 };
 
 const handleTouchMove = (event: TouchEvent) => {
-  if (!isSliding.value) return;
+  if (!isSliding.value || llmRoom.value) return;
   touchCurrentX.value = event.touches[0].clientX;
 
   const diff = touchCurrentX.value - touchStartX.value;
@@ -215,6 +196,8 @@ const handleTouchMove = (event: TouchEvent) => {
 };
 
 const handleTouchEnd = () => {
+  if (llmRoom.value) return;
+
   // Clear long press timer
   if (longPressTimer.value !== null) {
     clearTimeout(longPressTimer.value);
@@ -440,7 +423,14 @@ onUnmounted(() => {
   ]" @mouseenter="isHovered = true" @mouseleave="isHovered = false">
     <!-- Timestamp separator -->
     <div v-if="showTimestamp" class="flex justify-center w-full my-2">
-      <div class="px-3 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
+      <div :title="new Date(message.createdAt).toLocaleString([], {
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true,
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })" class="px-3 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-[11px] text-gray-500 dark:text-gray-400">
         {{ formatRelativeTime(message.createdAt) }}
       </div>
     </div>
@@ -503,7 +493,8 @@ onUnmounted(() => {
           year: new Date(message.createdAt).getFullYear() !== new Date().getFullYear() ? 'numeric' : undefined
         })">
         <!-- Replied message preview -->
-        <div v-if="repliedMessage" class="px-2 py-1 mb-1 text-xs border-l-2 rounded bg-gray-100/50 dark:bg-gray-700/50"
+        <div v-if="repliedMessage && !llmRoom"
+          class="px-2 py-1 mb-1 text-xs border-l-2 rounded bg-gray-100/50 dark:bg-gray-700/50"
           :class="isUser ? 'border-primary-foreground/50' : 'border-primary/50'">
           <div class="flex items-center gap-1">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
@@ -540,12 +531,14 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
+      <div v-if="showSendingIndicator" class="text-xxs text-gray-500 dark:text-gray-400">
+        <span class="text-gray-500 dark:text-gray-400">Sending..</span>
+      </div>
 
       <!-- Buttons container -->
       <div class="flex flex-col items-center gap-2">
         <!-- Metadata button (desktop) -->
-        <button v-if="message.type === 'llm'" @click="showMetadataDialog = true; console.log('Showing metadata dialog')"
-          title="View metadata" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+        <button v-if="message.type === 'llm'" @click="showMetadataDialog = true;" title="View metadata" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer hidden md:block" :class="{
             'opacity-0': !isHovered && !isMessageCodeBlock,
@@ -560,7 +553,7 @@ onUnmounted(() => {
         </button>
 
         <!-- Reply button (desktop only - hidden on mobile since we use slide) -->
-        <button v-if="!isMobile" @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
+        <button v-if="!isMobile && !llmRoom" @click.prevent="handleReply" class="p-1 rounded-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm
           hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400 
           group-hover:opacity-100 transition-opacity duration-200 cursor-pointer hidden md:block
           " :class="[isHovered ? 'opacity-100' : 'opacity-0']">

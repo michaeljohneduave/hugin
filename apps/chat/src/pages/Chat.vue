@@ -4,16 +4,16 @@ import loebotteAvatar from "@/assets/loebotte-avatar.webp";
 import pearlAvatar from "@/assets/pearl.svg";
 import MessageComponent from "@/components/Message.vue";
 import RoomEventComponent from "@/components/RoomEvent.vue";
+import { useCurrentMessages, useCurrentRoom } from "@/composables/useSync";
 import { useWebsocket } from "@/composables/useWebsocket";
-import { useTrpc } from "@/lib/trpc";
-import { useAuth, useUser } from "@clerk/vue";
+import { addMessageToDb, db } from "@/lib/dexie";
+import { useUser } from "@clerk/vue";
 import { llmAgents, llmRouters } from "@hugin-bot/core/src/ai";
-import type { ChatPayload, RoomPayload, User } from "@hugin-bot/core/src/types";
-import { BellIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-vue-next";
+import type { ChatPayload, } from "@hugin-bot/core/src/types";
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
-import { version } from "../../package.json";
+import { useRoute, useRouter, } from "vue-router";
+import ChatHeader from "../components/ChatHeader.vue";
 import MessageInput from "../components/MessageInput.vue";
-import NotificationSettings from "../components/NotificationSettings.vue";
 import { useTheme } from "../composables/useTheme";
 
 export type Attachment = {
@@ -41,25 +41,24 @@ const availableBots = llmAgents.concat(llmRouters).map((agent) => ({
 	type: "llm" as const,
 }));
 
-const unknownBot: User = {
-	id: "lobot",
-	name: "Loebotte",
-	avatar: loebotteAvatar,
-	type: "llm" as const,
-};
-const userMap = new Map<string, User>();
-
+const { room } = useCurrentRoom();
+const { messages } = useCurrentMessages();
 const { user: clerkUser } = useUser();
-const { signOut } = useAuth();
+const router = useRouter();
 const {
 	isOnline,
 	sendMessage: sendSocketMsg,
-	addMessageHandler,
-	removeMessageHandler,
-	connect,
 } = useWebsocket();
-const trpc = useTrpc();
-const { isDarkMode, toggleTheme } = useTheme();
+const { isDarkMode } = useTheme();
+
+const messageInput = ref("");
+const showAttachmentMenu = ref(false);
+const messagesContainer = ref<HTMLDivElement | null>(null);
+const showMentionSuggestions = ref(false);
+const replyToMessage = ref<ChatPayload | null>(null);
+
+const isScrolledToBottom = ref(true); // sus
+const isUserMenuOpen = ref(false);
 
 const currentUser = computed(() => ({
 	id: clerkUser.value!.id,
@@ -67,19 +66,6 @@ const currentUser = computed(() => ({
 	type: "user" as const,
 	avatar: clerkUser.value?.imageUrl,
 }));
-
-const chatRoomId = ref("");
-const messageInput = ref("");
-const chatMessages = ref<Array<ChatPayload | RoomPayload>>([]);
-const showAttachmentMenu = ref(false);
-const messagesContainer = ref<HTMLDivElement | null>(null);
-const showMentionSuggestions = ref(false);
-const showNotificationSettings = ref(false);
-const replyToMessage = ref<ChatPayload | null>(null);
-const isLoadingMessages = ref(true);
-
-const isScrolledToBottom = ref(true);
-const isUserMenuOpen = ref(false);
 
 // Update scrollToBottom function to be smoother and handle image loading
 const scrollToBottom = (force = false) => {
@@ -131,92 +117,6 @@ const scrollToBottom = (force = false) => {
 	});
 };
 
-const fetchMessages = async (roomId: string) => {
-	try {
-		isLoadingMessages.value = true;
-		const { messages, members } = await trpc.chats.messagesByRoom.query({
-			roomId,
-			limit: import.meta.env.DEV ? 20 : 1000,
-		});
-
-		const msgs: (ChatPayload | RoomPayload)[] = [];
-		for (const msg of messages) {
-			let user: User;
-
-			if (msg.type === "event" || msg.type === "user") {
-				if (userMap.has(msg.userId)) {
-					user = userMap.get(msg.userId)!;
-				} else {
-					const member = members.find((m) => m.userId === msg.userId);
-
-					if (member) {
-						user = {
-							id: member.userId,
-							name: `${member.user.firstName} ${member.user.lastName}`,
-							avatar: member.user.avatar,
-							type: msg.type,
-						};
-						userMap.set(msg.userId, user);
-					} else {
-						user = {
-							id: msg.userId,
-							name: "Unknown",
-							type: msg.type,
-						};
-					}
-				}
-			} else {
-				user =
-					availableBots.find((bot) => bot.id === msg.userId) ||
-					unknownBot;
-			}
-
-			msgs.push({
-				...msg,
-				user,
-			});
-		}
-
-		chatMessages.value = msgs;
-
-		// Wait for Vue to update the DOM before scrolling
-		await nextTick();
-		scrollToBottom(true);
-	} catch (error) {
-		console.error("Error fetching messages:", error);
-	} finally {
-		isLoadingMessages.value = false;
-	}
-};
-
-const fetchRooms = async () => {
-	const rooms = await trpc.chats.userRooms.query();
-	return rooms;
-};
-
-const handleWebSocketMessage = (event: MessageEvent) => {
-	const data = JSON.parse(event.data) as ChatPayload;
-	let user: User;
-
-	if (data.type === "event" || data.type === "user") {
-		user = userMap.get(data.userId) || {
-			id: data.userId,
-			name: "Unknown",
-			type: data.type,
-		};
-	} else {
-		user =
-			availableBots.find((bot) => bot.id === data.userId) || unknownBot;
-	}
-
-	data.user = user;
-	chatMessages.value.push(data);
-
-	if (data.action === "message") {
-		scrollToBottom();
-	}
-};
-
 const handleReplyToMessage = (message: ChatPayload) => {
 	replyToMessage.value = message;
 	// Focus the message input
@@ -232,15 +132,26 @@ const handleCancelReply = () => {
 	replyToMessage.value = null;
 };
 
-// When sending a message, include the replyToMessageId if replying
+// When sending a message; the app does the following
+// 1. Add the message into indexDB as unsent
+// 2. Send the message via ws
+// 3. If the message is sent successfully, update the message in indexDB to sent
+// 4. If the message is not sent successfully, message will be in a state of "unsent"
 const handleSendMessage = (message: ChatPayload) => {
-	if (replyToMessage.value) {
+
+	if (message.roomType === "llm") {
+		message.threadId = messages.value[messages.value.length - 1].threadId;
+	} else if (replyToMessage.value) {
 		message.replyToMessageId = replyToMessage.value.messageId;
 		message.threadId = replyToMessage.value.threadId;
 		replyToMessage.value = null;
 	} else {
 		message.replyToMessageId = undefined;
 	}
+
+	message.status = "unsent";
+	message.createdAt = Date.now();
+	message.updatedAt = Date.now();
 
 	sendSocketMsg(message);
 };
@@ -275,24 +186,25 @@ watch(messageInput, (newValue) => {
 	}
 });
 
-onMounted(async () => {
-	connect();
-	const rooms = await fetchRooms();
-	if (rooms.length > 0) {
-		chatRoomId.value = rooms[0].roomId;
-		await fetchMessages(rooms[0].roomId);
-	} else {
-		isLoadingMessages.value = false;
+watch(() => messages.value.length, (oldLen, newLen) => {
+	if (oldLen !== newLen) {
+		scrollToBottom();
 	}
+});
 
-	addMessageHandler(handleWebSocketMessage);
+watch(() => room.value, (newRoom) => {
+	if (!newRoom) {
+		router.push("/");
+	}
+});
+
+onMounted(() => {
 	document.addEventListener("click", handleShowAttachmentMenu);
 	document.addEventListener("click", handleOutsideClick);
 	// messagesContainer.value?.addEventListener('scroll', handleScroll);
 });
 
 onUnmounted(() => {
-	removeMessageHandler(handleWebSocketMessage);
 	// messagesContainer.value?.removeEventListener('scroll', handleScroll);
 	document.removeEventListener("click", handleShowAttachmentMenu);
 	document.removeEventListener("click", handleOutsideClick);
@@ -300,108 +212,13 @@ onUnmounted(() => {
 </script>
 
 <template>
-	<div class="h-12 flex items-center justify-between px-2 bg-white dark:bg-gray-800">
-		<div class="flex-1 flex items-center justify-between">
-			<div class="flex items-center space-x-2">
-				<div class="flex flex-col">
-					<h2 class="text-lg font-medium text-gray-900 dark:text-white">{{ chatRoomId }}</h2>
-					<span class="text-xs text-gray-400 dark:text-gray-500 -mt-1">v{{ version }}</span>
-				</div>
-				<div class="flex items-center">
-					<span class="inline-flex h-2 w-2 rounded-full mr-1" :class="isOnline ? 'bg-green-500' : 'bg-red-500'"></span>
-					<span class="text-xs text-gray-500 dark:text-gray-400">{{ isOnline ? 'Connected' : 'Disconnected'
-					}}</span>
-				</div>
-			</div>
-
-			<!-- User actions -->
-			<div class="flex items-center space-x-2">
-				<!-- Dropdown menu -->
-				<div class="relative user-menu-container">
-					<button @click="isUserMenuOpen = !isUserMenuOpen"
-						class="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700">
-						<svg class="h-5 w-5 text-gray-700 dark:text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
-						</svg>
-					</button>
-
-					<!-- Dropdown content -->
-					<div v-if="isUserMenuOpen"
-						class="absolute right-0 mt-2 w-48 rounded-md shadow-lg bg-white dark:bg-gray-800 ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50">
-						<div class="py-1">
-							<!-- Notifications -->
-							<button @click="showNotificationSettings = true; isUserMenuOpen = false"
-								class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700">
-								<BellIcon class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
-								Notifications
-							</button>
-
-							<!-- Dark mode toggle -->
-							<button @click="toggleTheme(); isUserMenuOpen = false"
-								class="flex items-center w-full px-4 py-2 text-left text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">
-								<SunIcon v-if="isDarkMode" class="h-5 w-5 mr-2 text-amber-500" />
-								<MoonIcon v-else class="h-5 w-5 mr-2 text-gray-500 dark:text-gray-300" />
-								{{ isDarkMode ? 'Light Mode' : 'Dark Mode' }}
-							</button>
-
-							<!-- Divider -->
-							<hr class="my-1 border-gray-200 dark:border-gray-700">
-
-							<!-- Logout -->
-							<button @click="signOut(); isUserMenuOpen = false"
-								class="flex items-center w-full px-4 py-2 text-left text-sm text-red-500 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700">
-								<LogOutIcon class="h-5 w-5 mr-2" />
-								Logout
-							</button>
-						</div>
-					</div>
-				</div>
-			</div>
-		</div>
-	</div>
-
-	<!-- Notification Settings Modal -->
-	<div v-show="showNotificationSettings"
-		class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-		<div class="relative bg-white dark:bg-gray-800 rounded-lg max-width-md w-full mx-4">
-			<div class="absolute top-4 right-4">
-				<button @click="showNotificationSettings = false"
-					class="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300">
-					<span class="sr-only">Close</span>
-					<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-					</svg>
-				</button>
-			</div>
-			<NotificationSettings />
-		</div>
-	</div>
+	<ChatHeader v-if="room" :title="room.name || room.roomId.split('-')[0] || 'Chat'" :isOnline="isOnline"
+		:roomType="room.type" />
 
 	<!-- Messages area -->
-	<div ref="messagesContainer" class="flex-1 overflow-y-auto pl-4 pr-2 py-2 space-y-4 min-h-0">
-		<!-- Loading messages state -->
-		<div v-if="isLoadingMessages" class="flex justify-center items-center h-full">
-			<div class="flex flex-col items-center text-gray-500 dark:text-gray-400">
-				<svg class="animate-spin h-8 w-8 mb-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-					<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-					<path class="opacity-75" fill="currentColor"
-						d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-					</path>
-				</svg>
-				<p>Loading chat...</p>
-			</div>
-		</div>
-
-		<!-- No room selected state (only shown when we've confirmed there are no rooms) -->
-		<div v-else-if="!chatRoomId && !isLoadingMessages" class="flex justify-center items-center h-full">
-			<div class="text-center text-gray-500 dark:text-gray-400">
-				<p class="text-lg">No chat room available</p>
-				<p class="text-sm">Create a room to start chatting</p>
-			</div>
-		</div>
-
+	<div v-if="room" ref="messagesContainer" class="flex-1 overflow-y-auto pl-4 pr-2 py-2 space-y-4 min-h-0">
 		<!-- Empty room state -->
-		<div v-else-if="chatMessages.length === 0" class="flex justify-center items-center h-full">
+		<div v-if="messages.length === 0" class="flex justify-center items-center h-full">
 			<div class="text-center text-gray-500 dark:text-gray-400">
 				<p class="text-lg">No messages yet</p>
 				<p class="text-sm">Send a message to start the conversation</p>
@@ -409,23 +226,23 @@ onUnmounted(() => {
 		</div>
 
 		<!-- Message list -->
-		<template v-for="(message, index) in chatMessages" :key="message.messageId">
-			<MessageComponent v-if="message.action === 'message'" :message="message as ChatPayload" :index="index"
-				:messages="chatMessages" :currentUser="currentUser!" :availableBots="availableBots"
+		<template v-for="(message, index) in messages" :key="message.messageId">
+			<!-- TODO: Remove messages prop -->
+			<MessageComponent v-if="message.action === 'message'" :message="message" :roomType="room.type" :index="index"
+				:messages="messages" :currentUser="currentUser!" :availableBots="availableBots"
 				@reply-to-message="handleReplyToMessage" />
-			<RoomEventComponent v-else-if="message.action === 'joinRoom' || message.action === 'leaveRoom'"
-				:event="message as RoomPayload" :index="index" />
+			<RoomEventComponent v-else-if="message.action === 'joinRoom' || message.action === 'leaveRoom'" :event="message"
+				:index="index" />
 		</template>
 	</div>
 
 	<!-- Input area -->
-	<div>
-		<MessageInput :currentUser="currentUser" :currentChatId="chatRoomId" :availableBots="availableBots"
-			:isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
+	<div v-if="room">
+		<MessageInput :currentUser="currentUser" :roomType="room.type" :currentChatId="room.roomId"
+			:availableBots="availableBots" :isDarkMode="isDarkMode" @sendMessage="handleSendMessage" :replyTo="replyToMessage"
 			@cancelReply="handleCancelReply" />
 	</div>
 </template>
-
 <style>
 /* Update dark mode styles */
 :root {

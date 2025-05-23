@@ -7,7 +7,7 @@ export class RedisConnectionStorage implements ConnectionStorage {
 	async refreshUserConnection(
 		userId: string,
 		token: string,
-		connectionId: string,
+		connectionId: string
 	): Promise<void> {
 		const pipeline = this.redis.pipeline();
 		await pipeline
@@ -17,7 +17,7 @@ export class RedisConnectionStorage implements ConnectionStorage {
 				`connection:${connectionId}`,
 				`${userId}--${token}`,
 				"EX",
-				CONNECTION_TTL_SECONDS,
+				CONNECTION_TTL_SECONDS
 			)
 			.exec();
 	}
@@ -27,7 +27,7 @@ export class RedisConnectionStorage implements ConnectionStorage {
 	}
 
 	async getConnectionData(
-		connectionId: string,
+		connectionId: string
 	): Promise<{ userId: string; token: string } | null> {
 		const data = await this.redis.get(`connection:${connectionId}`);
 		if (!data) return null;
@@ -44,7 +44,7 @@ export class RedisConnectionStorage implements ConnectionStorage {
 
 	async addConnIdToRooms(
 		roomIds: string[],
-		connectionId: string,
+		connectionId: string
 	): Promise<void> {
 		const pipeline = this.redis.pipeline();
 
@@ -59,7 +59,16 @@ export class RedisConnectionStorage implements ConnectionStorage {
 		await this.redis.srem(`room:${roomId}:members`, [userId]);
 	}
 
-	async getRoomConnectionIds(roomId: string): Promise<string[]> {
-		return await this.redis.smembers(`room:${roomId}:members`);
+	async getConnectionIdsByRoom(
+		userId: string,
+		roomId: string
+	): Promise<string[]> {
+		// User devices connected
+		const userConnections = await this.getUserConnections(userId);
+		// Room members' devices connected
+		const roomMembersConnections = await this.redis.smembers(
+			`room:${roomId}:members`
+		);
+		return userConnections.concat(roomMembersConnections);
 	}
 }

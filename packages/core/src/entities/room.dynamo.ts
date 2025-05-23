@@ -1,4 +1,4 @@
-import { Entity, type Schema } from "electrodb";
+import { Entity, type EntityItem } from "electrodb";
 import { dynamoConfig } from "../electro";
 
 const MAX_ROOM_NAME_LENGTH = 200;
@@ -26,6 +26,7 @@ export const RoomEntity = new Entity(
 				required: true,
 				readOnly: true,
 			},
+			// TODOS: Remove this, for the meantime do not use the user attribute on anything
 			user: {
 				type: "map",
 				properties: {
@@ -42,7 +43,7 @@ export const RoomEntity = new Entity(
 				required: true,
 			},
 			status: {
-				type: ["active", "inactive"],
+				type: ["active", "inactive"] as const,
 				required: true,
 			},
 			name: {
@@ -55,7 +56,12 @@ export const RoomEntity = new Entity(
 				readOnly: true,
 			},
 			type: {
-				type: ["group", "dm", "llm"],
+				type: ["group", "dm", "llm"] as const,
+				required: true,
+			},
+			// Only used for LLM chats not group/dm
+			agentId: {
+				type: "string",
 			},
 			updatedAt: {
 				type: "number",
@@ -92,5 +98,7 @@ export const RoomEntity = new Entity(
 			},
 		},
 	},
-	dynamoConfig,
+	dynamoConfig
 );
+
+export type RoomEntityType = EntityItem<typeof RoomEntity>;
