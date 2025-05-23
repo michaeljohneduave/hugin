@@ -13,32 +13,36 @@ const app = initializeApp({
 
 const messaging = getMessaging(app);
 
-interface PushNotificationMessage {
+export async function sendPushNotification({
+	token,
+	title,
+	body,
+	data,
+}: {
 	token: string;
-	notification: {
-		title: string;
-		body: string;
-	};
+	title: string;
+	body: string;
 	data?: Record<string, string>;
-}
-
-export async function sendPushNotification(
-	token: string,
-	title: string,
-	body: string,
-	data?: Record<string, string>,
-): Promise<void> {
+}): Promise<void> {
 	try {
-		const message: PushNotificationMessage = {
+		await messaging.send({
 			token,
-			notification: {
+			data: {
 				title,
-				body,
+				body: body,
+				icon: "/pwa-192x192.png",
 			},
-			data,
-		};
-
-		await messaging.send(message);
+			android: {
+				ttl: 1000 * 60 * 60,
+				priority: "normal",
+			},
+			apns: {
+				headers: {
+					"apns-expiration": `${(Date.now() / 1000 + 3600).toFixed(0)}`,
+					"apns-priority": "5",
+				},
+			},
+		});
 	} catch (error) {
 		console.error("[Firebase] Error sending push notification:", error);
 		throw error;
