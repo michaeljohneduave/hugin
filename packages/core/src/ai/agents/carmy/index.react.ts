@@ -1,16 +1,8 @@
-import type {
-	CoreMessage,
-	GenerateTextResult,
-	StreamTextResult,
-	ToolSet,
-} from "ai";
-import { generateObject, generateText, streamText, tool } from "ai";
-import _ from "lodash";
-import { z } from "zod";
-import type { AgentContext, ModeResultMap } from "../..";
+import type { CoreMessage } from "ai";
+import { generateText } from "ai";
+import type { AgentContext } from "../..";
 import { MessageEntity } from "../../../entities/message.dynamo";
-import { sleep } from "../../../utils";
-import { bigModel, bigThinkingModel, smolModel } from "../../config";
+import { bigModel } from "../../config";
 import { carmyTools } from "./tools"; // Assuming carmyTools is defined elsewhere
 
 // Refactored Carmy Prompt to encourage ReAct-like output
@@ -34,21 +26,27 @@ export const carmyPrompt = `
   <thought>
 		The user wants X. I need to use tool Y to get the necessary information.
   </thought>
+
   <action>
 		Use tool Y with parameters A, B, C.
   </action>
+
   <observation>
 		[Result of tool Y]
   </observation>
+
   <thought>
 		Based on the observation, Z is true. I need to use tool W to do Q.
   </thought>
+
   <action>
 		Use tool W with parameter D.
   </action>
+
   <observation>
 		Result of tool W
   </observation>
+	
   <final>
 		[Summarize results and provide the complete response]
   </final>
@@ -101,11 +99,13 @@ export const summarizeSteps = async (steps: string) => {
 
 export const carmyAgent = async ({
 	threadId,
+	roomId,
 	msgs,
 	context,
 	sendMessage,
 }: {
 	threadId: string;
+	roomId: string;
 	msgs?: CoreMessage[];
 	context: AgentContext;
 	sendMessage?: (message: string) => void; // This is for streaming intermediate thoughts/actions if desired
@@ -116,7 +116,8 @@ export const carmyAgent = async ({
 		messages = msgs;
 	} else {
 		const threadMessages = await MessageEntity.query
-			.byThread({
+			.byRoomAndThreadSortedByTime({
+				roomId: roomId,
 				threadId: threadId,
 			})
 			.go();
@@ -132,6 +133,8 @@ export const carmyAgent = async ({
 		type: "initial" | "tool-result" | "continue" | "final";
 		content: string;
 	}[] = [];
+
+	console.log("threadMessages", messages);
 
 	const response = await generateText({
 		model: bigModel, // Use a capable model that follows instructions well
@@ -199,11 +202,8 @@ export const carmyAgent = async ({
 
 	// Summarize the collected text steps (Thoughts and Final Answer)
 	const summary = await summarizeSteps(
-		responseSteps.map((step) => step.content).join("\n\n"),
+		responseSteps.map((step) => step.content).join("\n\n")
 	);
-
-	// Send the final summary to the user
-	// sendMessage(summary); // Assuming sendMessage is intended for the final output or streaming
 
 	return {
 		summary,

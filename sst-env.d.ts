@@ -25,6 +25,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "CLERK_WEBHOOK_SECRET": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "CLOUDFLARE_ACCOUNT_ID": {
       "type": "sst.sst.Secret"
       "value": string
@@ -36,6 +40,10 @@ declare module "sst" {
     "ChatSite": {
       "type": "sst.aws.StaticSite"
       "url": string
+    }
+    "ClerkPublicKey": {
+      "key": string
+      "type": "sst.sst.Linkable"
     }
     "ClerkPublishableKey": {
       "key": string

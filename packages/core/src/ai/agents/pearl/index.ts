@@ -27,17 +27,20 @@ If you can't help the user, say so.
 
 export async function pearlAgent({
 	threadId,
+	roomId,
 	context,
 	sendMessage,
 }: {
 	threadId: string;
+	roomId: string;
 	context: AgentContext;
 	sendMessage: (message: string) => void;
 }) {
 	const tools = pearlTools(context);
 
 	const messages = await MessageEntity.query
-		.byThread({
+		.byRoomAndThreadSortedByTime({
+			roomId: roomId,
 			threadId: threadId,
 		})
 		.go();
@@ -46,6 +49,8 @@ export async function pearlAgent({
 		role: message.type === "user" ? "user" : "assistant",
 		content: message.message || "",
 	})) as CoreMessage[];
+
+	console.log("threadMessages", threadMessages);
 
 	const response = await generateText({
 		model: bigModel,

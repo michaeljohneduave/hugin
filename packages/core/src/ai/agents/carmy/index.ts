@@ -1,16 +1,8 @@
-import type {
-	CoreMessage,
-	GenerateTextResult,
-	StreamTextResult,
-	ToolSet,
-} from "ai";
-import { generateObject, generateText, streamText, tool } from "ai";
-import _ from "lodash";
-import { z } from "zod";
-import type { AgentContext, ModeResultMap } from "../..";
+import type { CoreMessage } from "ai";
+import { generateText } from "ai";
+import type { AgentContext } from "../..";
 import { MessageEntity } from "../../../entities/message.dynamo";
-import { sleep } from "../../../utils";
-import { bigModel, bigThinkingModel, smolModel } from "../../config";
+import { bigModel } from "../../config";
 import { carmyTools } from "./tools"; // Assuming carmyTools is defined elsewhere
 
 export const carmyPrompt = `
@@ -111,15 +103,18 @@ export const summarizeSteps = async (steps: string) => {
 
 export const carmyAgent = async ({
 	threadId,
+	roomId,
 	context,
 	sendMessage,
 }: {
 	threadId: string;
+	roomId: string;
 	context: AgentContext;
 	sendMessage: (message: string) => void;
 }) => {
 	const messages = await MessageEntity.query
-		.byThread({
+		.byRoomAndThreadSortedByTime({
+			roomId: roomId,
 			threadId: threadId,
 		})
 		.go();
@@ -151,7 +146,7 @@ export const carmyAgent = async ({
 			console.log("toolResults", JSON.stringify(step.toolResults, null, 2)); // Observation
 			console.log(
 				"reasoningDetails",
-				JSON.stringify(step.reasoningDetails, null, 2),
+				JSON.stringify(step.reasoningDetails, null, 2)
 			);
 			console.log("finishReason", step.finishReason);
 			console.log("---End Step----");
@@ -167,7 +162,7 @@ export const carmyAgent = async ({
 	}
 
 	const summary = await summarizeSteps(
-		responseSteps.map((step) => step.content).join("\n\n"),
+		responseSteps.map((step) => step.content).join("\n\n")
 	);
 
 	return {

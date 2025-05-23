@@ -83,7 +83,7 @@ export default class Muppeteer {
 
 	async extractAllMatchesData(
 		page: Page,
-		cheerioQuery: string,
+		cheerioQuery: string
 		// Specify what to extract: 'html', 'text', or an attribute name like 'href'
 	): Promise<string[]> {
 		try {

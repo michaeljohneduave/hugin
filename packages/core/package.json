@@ -6,7 +6,7 @@
     "test": "sst shell vitest"
   },
   "dependencies": {
-    "@ai-sdk/google": "^1.1.16",
+    "@ai-sdk/google": "^1.2.18",
     "@aws-sdk/client-dynamodb": "^3.767.0",
     "@aws-sdk/client-lambda": "^3.782.0",
     "@boundaryml/baml": "^0.84.4",

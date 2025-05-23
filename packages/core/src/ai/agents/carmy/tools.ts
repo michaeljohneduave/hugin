@@ -423,9 +423,9 @@ export const carmyTools = (context: AgentContext) => {
 		}),
 		removeItemsFromGroceryList: tool({
 			description:
-				"Remove items from the grocery list, this is useful for removing items already bought or not needed",
+				"Remove items from the grocery list, items are case sensitive",
 			parameters: z.object({
-				item: z.array(z.string()),
+				items: z.array(z.string()),
 			}),
 			async execute(params) {
 				const groceryList = await GroceryListSchema.query
@@ -443,26 +443,31 @@ export const carmyTools = (context: AgentContext) => {
 					return "Multiple active grocery lists found";
 				}
 
-				const itemIndex = groceryList.data[0].items.findIndex((item) =>
-					params.item.includes(item.item)
-				);
-
-				if (itemIndex === -1) {
-					return "Item not found in grocery list";
+				for (const item of params.items) {
+					const itemIndex = groceryList.data[0].items.findIndex(
+						(i) => i.item === item
+					);
+					if (itemIndex !== -1) {
+						groceryList.data[0].items.splice(itemIndex, 1);
+					}
 				}
 
-				groceryList.data[0].items.splice(itemIndex, 1);
-
-				await GroceryListSchema.update({
+				const response = await GroceryListSchema.update({
 					userId: context.userId,
 					listId: groceryList.data[0].listId,
 				})
 					.set({
 						items: groceryList.data[0].items,
 					})
-					.go();
+					.go({
+						response: "updated_new",
+					});
 
-				return "Item removed from grocery list";
+				if (!response.data) {
+					return "Grocery list not updated";
+				}
+
+				return "Removed items from grocery list";
 			},
 		}),
 		updateGroceryList: tool({
@@ -717,7 +722,9 @@ export const carmyTools = (context: AgentContext) => {
 	// Apply the wrapper to all tools
 	return wrapToolExecute({
 		...personalTools,
+		// @ts-ignore
 		scrapeUrl,
+		// @ts-ignore
 		today,
 	});
 };
